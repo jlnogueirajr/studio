@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
 
 export type EmployeeData = {
@@ -12,6 +12,7 @@ export type EmployeeData = {
 };
 
 const EMPLOYEES_COLLECTION = "employees";
+const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
 export async function getEmployeeStoredData(matricula: string): Promise<EmployeeData | null> {
   try {
@@ -48,38 +49,57 @@ export async function clearEmployeeData(matricula: string) {
 }
 
 /**
- * Mocks the retrieval of HTML from the .NET page and triggers the AI extraction.
- * In a real scenario, this would use a library like 'undici' or 'axios' to fetch the target URL.
+ * Realiza a consulta real no site da empresa simulando o comportamento do PontoBot.
  */
 export async function fetchAndExtractPonto(matricula: string): Promise<RobustTimeDataExtractionOutput> {
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  // Simulate HTML fetching from the .NET external page
-  // In a real environment, we'd do: const response = await fetch('https://webapp.confianca.com.br/consultaponto/ponto.aspx#gridhora');
-  const mockHtml = `
-    <html>
-      <body>
-        <h1>Consulta Ponto - Matrícula ${matricula}</h1>
-        <table>
-          <thead>
-            <tr><th>Data</th><th>Entrada 1</th><th>Saída 1</th><th>Entrada 2</th><th>Saída 2</th><th>Total Dia</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>01/05/2024</td><td>08:00</td><td>12:00</td><td>13:00</td><td>17:00</td><td>08:00</td></tr>
-            <tr><td>02/05/2024</td><td>08:15</td><td>12:10</td><td>13:05</td><td>17:15</td><td>08:15</td></tr>
-            <tr><td>03/05/2024</td><td>07:55</td><td>12:00</td><td>13:00</td><td>18:00</td><td>09:05</td></tr>
-          </tbody>
-        </table>
-        <div id="resumo">Total de horas no mês: 25:20</div>
-      </body>
-    </html>
-  `;
-
   try {
+    // 1. GET inicial para pegar VIEWSTATE e cookies
+    const responseGet = await fetch(TARGET_URL, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      }
+    });
+
+    const htmlGet = await responseGet.text();
+    const cookies = responseGet.headers.get('set-cookie');
+
+    // 2. Extrair campos ocultos do ASP.NET
+    const viewState = htmlGet.match(/id="__VIEWSTATE" value="([^"]*)"/)?.[1] || "";
+    const eventValidation = htmlGet.match(/id="__EVENTVALIDATION" value="([^"]*)"/)?.[1] || "";
+    const viewStateGenerator = htmlGet.match(/id="__VIEWSTATEGENERATOR" value="([^"]*)"/)?.[1] || "";
+
+    // 3. POST para consultar a matrícula
+    const body = new URLSearchParams();
+    body.append('__VIEWSTATE', viewState);
+    body.append('__VIEWSTATEGENERATOR', viewStateGenerator);
+    body.append('__EVENTVALIDATION', eventValidation);
+    body.append('__EVENTTARGET', '');
+    body.append('__EVENTARGUMENT', '');
+    body.append('txtMatricula', matricula);
+    body.append('btnConsultar', 'Consultar');
+
+    const responsePost = await fetch(TARGET_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': TARGET_URL,
+        'Origin': 'https://webapp.confianca.com.br',
+        ...(cookies ? { 'Cookie': cookies } : {})
+      },
+      body: body.toString()
+    });
+
+    const htmlContent = await responsePost.text();
+
+    // 4. Trigger AI extraction no HTML real retornado
     const extracted = await robustTimeDataExtraction({
-      htmlContent: mockHtml,
+      htmlContent,
       matricula,
       month,
       year
@@ -87,7 +107,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
 
     return extracted;
   } catch (error) {
-    console.error("Extraction failed:", error);
-    throw new Error("AI extraction failed. Please try again later.");
+    console.error("Fetch/Extraction failed:", error);
+    throw new Error("Erro ao acessar o site da empresa ou extrair dados.");
   }
 }

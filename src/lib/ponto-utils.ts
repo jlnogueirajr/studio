@@ -5,8 +5,10 @@
 
 export function timeToMinutes(time: string): number {
   if (!time || !time.includes(':')) return 0;
-  const [h, m] = time.split(':').map(Number);
-  return (h || 0) * 60 + (m || 0);
+  const isNegative = time.startsWith('-');
+  const parts = time.replace('-', '').split(':').map(Number);
+  const total = (parts[0] || 0) * 60 + (parts[1] || 0);
+  return isNegative ? -total : total;
 }
 
 export function minutesToTime(totalMinutes: number, showSign = false): string {
@@ -18,11 +20,12 @@ export function minutesToTime(totalMinutes: number, showSign = false): string {
   return `${sign}${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Calcula os minutos trabalhados no dia com o fator noturno (1.1428x entre 22h e 05h).
+ */
 export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: string[]): number {
   let totalWorked = 0;
-  const NIGHT_START = 22 * 60; // 22:00
-  const NIGHT_END = 5 * 60;   // 05:00 (dia seguinte seria NIGHT_END + 24*60)
-  const NIGHT_FACTOR = 60 / 52.5;
+  const NIGHT_FACTOR = 60 / 52.5; // Aproximadamente 1.142857
 
   const pairsCount = Math.min(entryTimes.length, exitTimes.length);
 
@@ -30,28 +33,26 @@ export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: str
     let start = timeToMinutes(entryTimes[i]);
     let end = timeToMinutes(exitTimes[i]);
 
-    // Se a saída for antes da entrada, assumimos que virou o dia
+    // Se a saída for antes da entrada (ex: 23:00 às 06:00), end vira dia seguinte
     if (end < start) {
       end += 24 * 60;
     }
 
-    // Cálculo do período trabalhado bruto
     const totalDuration = end - start;
+    let nightMinutes = 0;
 
-    // Cálculo da intersecção com o período noturno (22:00 às 05:00 do dia seguinte)
-    // Período noturno 1: 22:00 (dia 1) às 05:00 (dia 2)
+    // Período noturno principal: 22:00 às 29:00 (05:00 do dia seguinte)
     const nightRangeStart = 22 * 60;
-    const nightRangeEnd = (24 + 5) * 60;
+    const nightRangeEnd = 29 * 60;
 
     const intersectionStart = Math.max(start, nightRangeStart);
     const intersectionEnd = Math.min(end, nightRangeEnd);
 
-    let nightMinutes = 0;
     if (intersectionStart < intersectionEnd) {
-      nightMinutes = intersectionEnd - intersectionStart;
+      nightMinutes += (intersectionEnd - intersectionStart);
     }
 
-    // Se o turno começou antes das 05:00 do dia 1 (ex: começou às 04:00)
+    // Período noturno inicial (se o turno começou antes das 05:00 do dia atual)
     const earlyNightRangeStart = 0;
     const earlyNightRangeEnd = 5 * 60;
     const earlyIntersectionStart = Math.max(start, earlyNightRangeStart);
@@ -66,8 +67,4 @@ export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: str
   }
 
   return Math.round(totalWorked);
-}
-
-export function calculateBalance(workedMinutes: number, goalMinutes: number): number {
-  return workedMinutes - goalMinutes;
 }

@@ -15,26 +15,29 @@ interface SummaryCardsProps {
 
 export function SummaryCards({ records, previousBalance }: SummaryCardsProps) {
   const stats = useMemo(() => {
-    // Calculamos o total trabalhado no mês atual com base nos registros extraídos
+    if (!records) return { monthTotal: '00:00', monthBalance: '00:00', totalBalance: '00:00', isPositive: true };
+
+    // Calculamos o total trabalhado no mês atual com base nos registros
     const workedMinutes = records.reduce((acc, record) => {
       return acc + calculateDailyWorkedMinutes(record.entryTimes, record.exitTimes);
     }, 0);
 
-    // Meta diária padrão do PontoBot (07:20)
+    // Meta diária padrão (07:20)
     const DAILY_GOAL = 7 * 60 + 20;
     const totalGoalMinutes = records.length * DAILY_GOAL;
 
-    const prevBalanceMinutes = timeToMinutes(previousBalance.replace('+', '').replace('-', '')) * (previousBalance.startsWith('-') ? -1 : 1);
+    // Saldo anterior (convertendo string para minutos)
+    const prevBalanceMinutes = timeToMinutes(previousBalance);
     
     // Saldo do mês = trabalhado - meta
-    const monthBalance = workedMinutes - totalGoalMinutes;
-    const totalBalance = monthBalance + prevBalanceMinutes;
+    const monthBalanceMinutes = workedMinutes - totalGoalMinutes;
+    const totalBalanceMinutes = monthBalanceMinutes + prevBalanceMinutes;
 
     return {
       monthTotal: minutesToTime(workedMinutes),
-      monthBalance: minutesToTime(monthBalance, true),
-      totalBalance: minutesToTime(totalBalance, true),
-      isPositive: totalBalance >= 0
+      monthBalance: minutesToTime(monthBalanceMinutes, true),
+      totalBalance: minutesToTime(totalBalanceMinutes, true),
+      isPositive: totalBalanceMinutes >= 0
     };
   }, [records, previousBalance]);
 
@@ -47,7 +50,7 @@ export function SummaryCards({ records, previousBalance }: SummaryCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{stats.monthTotal}</div>
-          <p className="text-xs text-muted-foreground">Horas reais trabalhadas (com noturno)</p>
+          <p className="text-xs text-muted-foreground">Com fator noturno (52.5m)</p>
         </CardContent>
       </Card>
 
@@ -58,7 +61,7 @@ export function SummaryCards({ records, previousBalance }: SummaryCardsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{previousBalance}</div>
-          <p className="text-xs text-muted-foreground">Saldo carregado do mês passado</p>
+          <p className="text-xs text-muted-foreground">Saldo do mês passado</p>
         </CardContent>
       </Card>
 
@@ -71,7 +74,7 @@ export function SummaryCards({ records, previousBalance }: SummaryCardsProps) {
           <div className={`text-2xl font-bold ${stats.isPositive ? 'text-green-600' : 'text-destructive'}`}>
             {stats.totalBalance}
           </div>
-          <p className="text-xs text-muted-foreground">Total acumulado (Mês + Anterior)</p>
+          <p className="text-xs text-muted-foreground">Meta de 07:20 por dia</p>
         </CardContent>
       </Card>
     </div>
