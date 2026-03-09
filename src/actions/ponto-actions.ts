@@ -31,7 +31,8 @@ export async function getEmployeeStoredData(matricula: string): Promise<Employee
 export async function saveEmployeeData(data: EmployeeData) {
   try {
     const docRef = doc(db, EMPLOYEES_COLLECTION, data.matricula);
-    await setDoc(docRef, data, { merge: true });
+    // Persistência no Firestore seguindo as diretrizes (non-blocking)
+    setDoc(docRef, data, { merge: true });
   } catch (error) {
     console.error("Error saving employee data:", error);
     throw new Error("Failed to save data.");
@@ -41,11 +42,30 @@ export async function saveEmployeeData(data: EmployeeData) {
 export async function clearEmployeeData(matricula: string) {
   try {
     const docRef = doc(db, EMPLOYEES_COLLECTION, matricula);
-    await deleteDoc(docRef);
+    deleteDoc(docRef);
   } catch (error) {
     console.error("Error clearing employee data:", error);
     throw new Error("Failed to clear data.");
   }
+}
+
+/**
+ * Auxiliar para extrair campos ocultos necessários para o ciclo de vida do ASP.NET
+ */
+function extractHiddenFields(html: string) {
+  const fields: Record<string, string> = {};
+  const aspnetFields = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION', '__EVENTTARGET', '__EVENTARGUMENT'];
+  
+  for (const field of aspnetFields) {
+    const regex = new RegExp(`id="${field}" value="([^"]*)"`);
+    const match = html.match(regex);
+    if (match) {
+      fields[field] = match[1];
+    } else {
+      fields[field] = "";
+    }
+  }
+  return fields;
 }
 
 /**
@@ -57,30 +77,36 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
   const year = now.getFullYear();
 
   try {
-    // 1. GET inicial para pegar VIEWSTATE e cookies
+    // 1. GET inicial para capturar VIEWSTATE e Cookies da sessão
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      }
+      },
+      cache: 'no-store'
     });
 
+    if (!responseGet.ok) {
+      throw new Error(`Erro ao acessar o portal: ${responseGet.status}`);
+    }
+
     const htmlGet = await responseGet.text();
-    const cookies = responseGet.headers.get('set-cookie');
+    const setCookie = responseGet.headers.get('set-cookie');
+    const cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
 
-    // 2. Extrair campos ocultos do ASP.NET
-    const viewState = htmlGet.match(/id="__VIEWSTATE" value="([^"]*)"/)?.[1] || "";
-    const eventValidation = htmlGet.match(/id="__EVENTVALIDATION" value="([^"]*)"/)?.[1] || "";
-    const viewStateGenerator = htmlGet.match(/id="__VIEWSTATEGENERATOR" value="([^"]*)"/)?.[1] || "";
+    // 2. Extrair tokens de formulário dinâmicos
+    const hiddenFields = extractHiddenFields(htmlGet);
 
-    // 3. POST para consultar a matrícula
+    // 3. Preparar o POST exatamente como o site espera (x-www-form-urlencoded)
     const body = new URLSearchParams();
-    body.append('__VIEWSTATE', viewState);
-    body.append('__VIEWSTATEGENERATOR', viewStateGenerator);
-    body.append('__EVENTVALIDATION', eventValidation);
-    body.append('__EVENTTARGET', '');
-    body.append('__EVENTARGUMENT', '');
-    body.append('txtMatricula', matricula);
+    Object.entries(hiddenFields).forEach(([key, value]) => {
+      body.append(key, value);
+    });
+    
+    // Configurar o gatilho de consulta
+    body.set('__EVENTTARGET', 'btnConsultar'); 
+    body.set('__EVENTARGUMENT', '');
+    body.set('txtMatricula', matricula);
     body.append('btnConsultar', 'Consultar');
 
     const responsePost = await fetch(TARGET_URL, {
@@ -92,12 +118,22 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
         'Origin': 'https://webapp.confianca.com.br',
         ...(cookies ? { 'Cookie': cookies } : {})
       },
-      body: body.toString()
+      body: body.toString(),
+      cache: 'no-store'
     });
+
+    if (!responsePost.ok) {
+      throw new Error(`Falha na consulta: ${responsePost.status}`);
+    }
 
     const htmlContent = await responsePost.text();
 
-    // 4. Trigger AI extraction no HTML real retornado
+    // Verificação de conteúdo básico
+    if (htmlContent.includes("Matrícula não encontrada") || htmlContent.length < 500) {
+      throw new Error("Matrícula não localizada no portal da empresa.");
+    }
+
+    // 4. Extração via IA focada na tabela de dados (id: Grid)
     const extracted = await robustTimeDataExtraction({
       htmlContent,
       matricula,
@@ -106,8 +142,8 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     });
 
     return extracted;
-  } catch (error) {
-    console.error("Fetch/Extraction failed:", error);
-    throw new Error("Erro ao acessar o site da empresa ou extrair dados.");
+  } catch (error: any) {
+    console.error("Ponto Fetch Error:", error);
+    throw new Error(error.message || "Erro inesperado ao consultar o portal.");
   }
 }

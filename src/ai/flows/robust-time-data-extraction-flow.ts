@@ -1,34 +1,30 @@
 'use server';
 /**
- * @fileOverview This file implements a Genkit flow for robustly extracting time clock data from HTML content.
- *
- * - robustTimeDataExtraction - A function that handles the extraction process.
- * - RobustTimeDataExtractionInput - The input type for the robustTimeDataExtraction function.
- * - RobustTimeDataExtractionOutput - The return type for the robustTimeDataExtraction function.
+ * @fileOverview Fluxo Genkit para extração robusta de dados de ponto a partir de HTML.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const RobustTimeDataExtractionInputSchema = z.object({
-  htmlContent: z.string().describe('The full HTML content of the time clock page.'),
-  matricula: z.string().describe('The employee ID (matrícula) to extract data for.'),
-  month: z.number().int().min(1).max(12).describe('The month number (1-12) for which data is being extracted.'),
-  year: z.number().int().min(1900).max(2100).describe('The year for which data is being extracted.'),
+  htmlContent: z.string().describe('O conteúdo HTML completo da página de consulta.'),
+  matricula: z.string().describe('A matrícula do colaborador.'),
+  month: z.number().int().min(1).max(12).describe('O mês da consulta.'),
+  year: z.number().int().min(1900).max(2100).describe('O ano da consulta.'),
 });
 export type RobustTimeDataExtractionInput = z.infer<typeof RobustTimeDataExtractionInputSchema>;
 
 const TimeRecordSchema = z.object({
-  date: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Date must be in DD/MM/YYYY format.').describe('The date of the record in DD/MM/YYYY format.'),
-  entryTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format.')).describe('An array of entry times in HH:MM format.'),
-  exitTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format.')).describe('An array of exit times in HH:MM format.'),
-  dailyHours: z.string().regex(/^\d{2}:\d{2}$/, 'Daily hours must be in HH:MM format.').describe('The total daily hours in HH:MM format.'),
+  date: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/).describe('Data em formato DD/MM/YYYY.'),
+  entryTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).describe('Lista de horários de entrada (HH:MM).'),
+  exitTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).describe('Lista de horários de saída (HH:MM).'),
+  dailyHours: z.string().regex(/^\d{2}:\d{2}$/).describe('Total de horas úteis do dia (HH:MM).'),
 });
 
 const RobustTimeDataExtractionOutputSchema = z.object({
-  employeeId: z.string().describe('The employee ID (matrícula) for the extracted data.'),
-  monthSummary: z.string().describe('A summary string of the total hours for the month, if available. E.g., "Total de horas no mês: XX:YY".'),
-  dailyRecords: z.array(TimeRecordSchema).describe('An array of daily time records extracted from the HTML.'),
+  employeeId: z.string().describe('Matrícula confirmada.'),
+  monthSummary: z.string().describe('Resumo mensal encontrado.'),
+  dailyRecords: z.array(TimeRecordSchema).describe('Registros diários extraídos da tabela Grid.'),
 });
 export type RobustTimeDataExtractionOutput = z.infer<typeof RobustTimeDataExtractionOutputSchema>;
 
@@ -36,28 +32,24 @@ const robustTimeDataExtractionPrompt = ai.definePrompt({
   name: 'robustTimeDataExtractionPrompt',
   input: {schema: RobustTimeDataExtractionInputSchema},
   output: {schema: RobustTimeDataExtractionOutputSchema},
-  prompt: `You are an expert at parsing HTML documents, specifically designed to extract time clock data.
-You need to extract daily time records for an employee from the provided HTML content.
-The employee ID is '{{{matricula}}}'.
-The data corresponds to the month '{{{month}}}' and year '{{{year}}}'.
+  prompt: `Você é um especialista em parsing de HTML ASP.NET para dados de ponto.
+Seu objetivo é extrair os registros de ponto da matrícula '{{{matricula}}}' do mês {{{month}}}/{{{year}}}.
 
-Analyze the HTML to find a table or a structured list that contains daily point entries and exits.
-For each day, identify and extract:
-1.  **Date**: This is typically presented in 'DD/MM/YYYY' format.
-2.  **Entry Times**: One or more times when the employee clocked in (e.g., 'HH:MM').
-3.  **Exit Times**: One or more times when the employee clocked out (e.g., 'HH:MM').
-4.  **Daily Hours**: The total calculated hours for that specific day (e.g., 'HH:MM').
+Procure especificamente por uma tabela com ID 'Grid'.
+Extraia para cada dia:
+1. Data (DD/MM/YYYY)
+2. Horários de Entrada (Entry)
+3. Horários de Saída (Exit)
+4. Total de Horas Úteis do dia
 
-Also, look for a monthly summary of total hours if available. If no specific summary is found, provide an empty string for 'monthSummary'.
+Importante: Se houverem múltiplos pares de entrada/saída no mesmo dia, capture todos. Ignore linhas vazias ou sem horários válidos.
 
-It is crucial that you are robust to minor changes in the HTML structure (e.g., different class names, slight reordering of elements). Use common sense and pattern recognition to identify the correct data points.
-The output MUST be a JSON object strictly conforming to the following schema. Ensure all fields are present and correctly formatted. If a field cannot be found, provide an appropriate empty value (e.g., empty string, empty array).
-
+Retorne estritamente um JSON:
 \`\`\`json
 {{jsonSchema RobustTimeDataExtractionOutputSchema}}
 \`\`\`
 
-Here is the HTML content to parse:
+HTML:
 \`\`\`html
 {{{htmlContent}}}
 \`\`\`
