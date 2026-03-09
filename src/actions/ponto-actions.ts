@@ -1,71 +1,31 @@
 'use server';
+/**
+ * Server Action responsável por realizar o scraping do portal da empresa.
+ * Não utiliza Firebase (Admin ou Client) para respeitar a separação de responsabilidades.
+ */
 
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
 
-export type EmployeeData = {
-  matricula: string;
-  previousBalance: string; // HH:MM
-  lastFetch: string; // ISO Date
-  extractedData: RobustTimeDataExtractionOutput | null;
-};
-
-const EMPLOYEES_COLLECTION = "employees";
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
-export async function getEmployeeStoredData(matricula: string): Promise<EmployeeData | null> {
-  try {
-    const docRef = doc(db, EMPLOYEES_COLLECTION, matricula);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data() as EmployeeData;
-    }
-    return null;
-  } catch (error) {
-    console.error("Error fetching employee data:", error);
-    return null;
-  }
-}
-
-export async function saveEmployeeData(data: EmployeeData) {
-  try {
-    const docRef = doc(db, EMPLOYEES_COLLECTION, data.matricula);
-    // Persistência no Firestore seguindo as diretrizes (non-blocking)
-    setDoc(docRef, data, { merge: true });
-  } catch (error) {
-    console.error("Error saving employee data:", error);
-    throw new Error("Failed to save data.");
-  }
-}
-
-export async function clearEmployeeData(matricula: string) {
-  try {
-    const docRef = doc(db, EMPLOYEES_COLLECTION, matricula);
-    deleteDoc(docRef);
-  } catch (error) {
-    console.error("Error clearing employee data:", error);
-    throw new Error("Failed to clear data.");
-  }
-}
-
 /**
- * Auxiliar para extrair campos ocultos necessários para o ciclo de vida do ASP.NET
+ * Extrai TODOS os inputs do HTML, simulando o comportamento do BeautifulSoup no Python.
+ * Captura name e value de campos ocultos e visíveis necessários para o ASP.NET.
  */
-function extractHiddenFields(html: string) {
-  const fields: Record<string, string> = {};
-  const aspnetFields = ['__VIEWSTATE', '__VIEWSTATEGENERATOR', '__EVENTVALIDATION', '__EVENTTARGET', '__EVENTARGUMENT'];
-  
-  for (const field of aspnetFields) {
-    const regex = new RegExp(`id="${field}" value="([^"]*)"`);
-    const match = html.match(regex);
-    if (match) {
-      fields[field] = match[1];
-    } else {
-      fields[field] = "";
+function extractAllInputs(html: string) {
+  const inputs: Record<string, string> = {};
+  // Regex mais abrangente para capturar inputs ASP.NET
+  const inputRegex = /<input\s+[^>]*?name="([^"]+?)"[^>]*?value="([^"]*?)"/gi;
+  let match;
+  while ((match = inputRegex.exec(html)) !== null) {
+    const name = match[1];
+    const value = match[2];
+    // Evita capturar botões que não sejam o btnConsultar para não interferir na ação do form
+    if (!/btn|submit|button/i.test(name) || name === 'btnConsultar') {
+      inputs[name] = value;
     }
   }
-  return fields;
+  return inputs;
 }
 
 /**
@@ -77,7 +37,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
   const year = now.getFullYear();
 
   try {
-    // 1. GET inicial para capturar VIEWSTATE e Cookies da sessão
+    // 1. GET inicial para capturar a sessão e tokens
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: {
@@ -87,27 +47,28 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     });
 
     if (!responseGet.ok) {
-      throw new Error(`Erro ao acessar o portal: ${responseGet.status}`);
+      throw new Error(`Erro de conexão com o portal: ${responseGet.status}`);
     }
 
     const htmlGet = await responseGet.text();
     const setCookie = responseGet.headers.get('set-cookie');
+    // Manter cookies de sessão se fornecidos
     const cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
 
-    // 2. Extrair tokens de formulário dinâmicos
-    const hiddenFields = extractHiddenFields(htmlGet);
+    const allInputs = extractAllInputs(htmlGet);
 
-    // 3. Preparar o POST exatamente como o site espera (x-www-form-urlencoded)
+    // 2. Preparar o POST
     const body = new URLSearchParams();
-    Object.entries(hiddenFields).forEach(([key, value]) => {
+    Object.entries(allInputs).forEach(([key, value]) => {
       body.append(key, value);
     });
     
-    // Configurar o gatilho de consulta
+    // Sobrescrever/Adicionar campos vitais para a consulta ASP.NET
     body.set('__EVENTTARGET', 'btnConsultar'); 
     body.set('__EVENTARGUMENT', '');
     body.set('txtMatricula', matricula);
-    body.append('btnConsultar', 'Consultar');
+    body.set('btnConsultar', 'Consultar');
+    body.set('ScriptManager1', 'UpdatePanel1|btnConsultar');
 
     const responsePost = await fetch(TARGET_URL, {
       method: 'POST',
@@ -123,17 +84,16 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     });
 
     if (!responsePost.ok) {
-      throw new Error(`Falha na consulta: ${responsePost.status}`);
+      throw new Error(`Falha ao enviar dados de consulta: ${responsePost.status}`);
     }
 
     const htmlContent = await responsePost.text();
 
-    // Verificação de conteúdo básico
-    if (htmlContent.includes("Matrícula não encontrada") || htmlContent.length < 500) {
-      throw new Error("Matrícula não localizada no portal da empresa.");
+    if (htmlContent.includes("Matrícula não encontrada") || htmlContent.includes("inválida")) {
+      throw new Error("Matrícula não encontrada no portal da empresa.");
     }
 
-    // 4. Extração via IA focada na tabela de dados (id: Grid)
+    // 3. Extração via IA - Passando o HTML para o fluxo Genkit
     const extracted = await robustTimeDataExtraction({
       htmlContent,
       matricula,
@@ -141,9 +101,12 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       year
     });
 
+    if (!extracted || extracted.dailyRecords.length === 0) {
+      throw new Error("Nenhum registro de ponto encontrado para o período atual.");
+    }
+
     return extracted;
   } catch (error: any) {
-    console.error("Ponto Fetch Error:", error);
-    throw new Error(error.message || "Erro inesperado ao consultar o portal.");
+    throw new Error(error.message || "Erro ao consultar portal.");
   }
 }

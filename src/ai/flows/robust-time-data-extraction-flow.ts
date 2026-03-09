@@ -24,7 +24,7 @@ const TimeRecordSchema = z.object({
 const RobustTimeDataExtractionOutputSchema = z.object({
   employeeId: z.string().describe('Matrícula confirmada.'),
   monthSummary: z.string().describe('Resumo mensal encontrado.'),
-  dailyRecords: z.array(TimeRecordSchema).describe('Registros diários extraídos da tabela Grid.'),
+  dailyRecords: z.array(TimeRecordSchema).describe('Registros diários extraídos.'),
 });
 export type RobustTimeDataExtractionOutput = z.infer<typeof RobustTimeDataExtractionOutputSchema>;
 
@@ -32,27 +32,19 @@ const robustTimeDataExtractionPrompt = ai.definePrompt({
   name: 'robustTimeDataExtractionPrompt',
   input: {schema: RobustTimeDataExtractionInputSchema},
   output: {schema: RobustTimeDataExtractionOutputSchema},
-  prompt: `Você é um especialista em parsing de HTML ASP.NET para dados de ponto.
-Seu objetivo é extrair os registros de ponto da matrícula '{{{matricula}}}' do mês {{{month}}}/{{{year}}}.
+  prompt: `Você é um especialista em extração de dados de ponto de sistemas corporativos ASP.NET.
+Seu objetivo é extrair TODOS os registros de ponto da matrícula '{{{matricula}}}' referentes ao mês {{{month}}}/{{{year}}}.
 
-Procure especificamente por uma tabela com ID 'Grid'.
-Extraia para cada dia:
-1. Data (DD/MM/YYYY)
-2. Horários de Entrada (Entry)
-3. Horários de Saída (Exit)
-4. Total de Horas Úteis do dia
+Anote as seguintes regras:
+1. Procure por tabelas (geralmente com ID 'Grid' ou similar) que contenham colunas como "Data", "Entrada", "Saída", "Total".
+2. Se houver horários espalhados no HTML que não estejam em uma tabela óbvia, mas que sigam o padrão HH:MM, agrupe-os por data.
+3. Ignore feriados ou dias sem registros se eles não aparecerem.
+4. Para cada dia encontrado, retorne a data no formato DD/MM/YYYY e os arrays de entradas e saídas.
 
-Importante: Se houverem múltiplos pares de entrada/saída no mesmo dia, capture todos. Ignore linhas vazias ou sem horários válidos.
+Importante: O HTML pode conter muitos scripts e campos ocultos, foque apenas nos dados visíveis de horários.
 
-Retorne estritamente um JSON:
-\`\`\`json
-{{jsonSchema RobustTimeDataExtractionOutputSchema}}
-\`\`\`
-
-HTML:
-\`\`\`html
+HTML para processar:
 {{{htmlContent}}}
-\`\`\`
 `,
 });
 

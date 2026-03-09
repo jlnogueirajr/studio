@@ -5,11 +5,23 @@ import { MatriculaInput } from '@/components/MatriculaInput';
 import { SummaryCards } from '@/components/dashboard/SummaryCards';
 import { DailyRecordsTable } from '@/components/dashboard/DailyRecordsTable';
 import { PreviousBalanceDialog } from '@/components/PreviousBalanceDialog';
-import { getEmployeeStoredData, saveEmployeeData, fetchAndExtractPonto, EmployeeData, clearEmployeeData } from '@/actions/ponto-actions';
+import { fetchAndExtractPonto } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
 import { Trash2, RefreshCcw, LogOut } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { RobustTimeDataExtractionOutput } from '@/ai/flows/robust-time-data-extraction-flow';
+
+export type EmployeeData = {
+  matricula: string;
+  previousBalance: string; // HH:MM
+  lastFetch: string; // ISO Date
+  extractedData: RobustTimeDataExtractionOutput | null;
+};
+
+const EMPLOYEES_COLLECTION = "employees";
 
 export default function Home() {
   const [matricula, setMatricula] = useState<string | null>(null);
@@ -30,32 +42,41 @@ export default function Home() {
     localStorage.setItem('last_matricula', m);
 
     try {
-      const stored = await getEmployeeStoredData(m);
+      // Busca no Firestore (Client Side SDK)
+      const docRef = doc(db, EMPLOYEES_COLLECTION, m);
+      const docSnap = await getDoc(docRef);
+      const stored = docSnap.exists() ? docSnap.data() as EmployeeData : null;
+
+      // Chama a Server Action para o scraping
       const freshExtracted = await fetchAndExtractPonto(m);
       
+      let updated: EmployeeData;
+
       if (stored) {
-        const updated: EmployeeData = {
+        updated = {
           ...stored,
           lastFetch: new Date().toISOString(),
           extractedData: freshExtracted
         };
-        setEmployeeData(updated);
-        await saveEmployeeData(updated);
       } else {
-        const initial: EmployeeData = {
+        updated = {
           matricula: m,
           previousBalance: '00:00',
           lastFetch: new Date().toISOString(),
           extractedData: freshExtracted
         };
-        setEmployeeData(initial);
         setShowBalanceDialog(true);
       }
-    } catch (error) {
+
+      setEmployeeData(updated);
+      // Salva no Firestore (Client Side SDK)
+      await setDoc(doc(db, EMPLOYEES_COLLECTION, m), updated, { merge: true });
+
+    } catch (error: any) {
       toast({
         variant: "destructive",
         title: "Erro na consulta",
-        description: "Não foi possível carregar os dados. Verifique a matrícula e tente novamente."
+        description: error.message || "Não foi possível carregar os dados. Verifique a matrícula e tente novamente."
       });
     } finally {
       setIsLoading(false);
@@ -63,12 +84,13 @@ export default function Home() {
   };
 
   const handleSaveBalance = async (balance: string) => {
-    if (employeeData) {
-      // Garantir formato +HH:MM ou -HH:MM se necessário, mas o dialog já ajuda
+    if (employeeData && matricula) {
       const formattedBalance = balance.includes(':') ? balance : '00:00';
       const updated = { ...employeeData, previousBalance: formattedBalance };
       setEmployeeData(updated);
-      await saveEmployeeData(updated);
+      
+      await setDoc(doc(db, EMPLOYEES_COLLECTION, matricula), updated, { merge: true });
+      
       setShowBalanceDialog(false);
       toast({
         title: "Saldo salvo",
@@ -81,7 +103,7 @@ export default function Home() {
     if (matricula) {
       setIsLoading(true);
       try {
-        await clearEmployeeData(matricula);
+        await deleteDoc(doc(db, EMPLOYEES_COLLECTION, matricula));
         localStorage.removeItem('last_matricula');
         setMatricula(null);
         setEmployeeData(null);
