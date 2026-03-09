@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Trash2, RefreshCcw, LogOut } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { db } from '@/lib/firebase';
+import { useFirestore } from '@/firebase';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { RobustTimeDataExtractionOutput } from '@/ai/flows/robust-time-data-extraction-flow';
 
@@ -28,6 +28,7 @@ export default function Home() {
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
+  const firestore = useFirestore();
 
   useEffect(() => {
     const saved = localStorage.getItem('last_matricula');
@@ -37,13 +38,14 @@ export default function Home() {
   }, []);
 
   const handleSearch = async (m: string) => {
+    if (!firestore) return;
     setIsLoading(true);
     setMatricula(m);
     localStorage.setItem('last_matricula', m);
 
     try {
-      // Busca no Firestore (Client Side SDK)
-      const docRef = doc(db, EMPLOYEES_COLLECTION, m);
+      // Busca no Firestore (Client Side SDK) usando o hook padrão
+      const docRef = doc(firestore, EMPLOYEES_COLLECTION, m);
       const docSnap = await getDoc(docRef);
       const stored = docSnap.exists() ? docSnap.data() as EmployeeData : null;
 
@@ -69,10 +71,11 @@ export default function Home() {
       }
 
       setEmployeeData(updated);
-      // Salva no Firestore (Client Side SDK)
-      await setDoc(doc(db, EMPLOYEES_COLLECTION, m), updated, { merge: true });
+      // Salva no Firestore
+      await setDoc(doc(firestore, EMPLOYEES_COLLECTION, m), updated, { merge: true });
 
     } catch (error: any) {
+      console.error(error);
       toast({
         variant: "destructive",
         title: "Erro na consulta",
@@ -84,12 +87,12 @@ export default function Home() {
   };
 
   const handleSaveBalance = async (balance: string) => {
-    if (employeeData && matricula) {
+    if (employeeData && matricula && firestore) {
       const formattedBalance = balance.includes(':') ? balance : '00:00';
       const updated = { ...employeeData, previousBalance: formattedBalance };
       setEmployeeData(updated);
       
-      await setDoc(doc(db, EMPLOYEES_COLLECTION, matricula), updated, { merge: true });
+      await setDoc(doc(firestore, EMPLOYEES_COLLECTION, matricula), updated, { merge: true });
       
       setShowBalanceDialog(false);
       toast({
@@ -100,10 +103,10 @@ export default function Home() {
   };
 
   const handleClear = async () => {
-    if (matricula) {
+    if (matricula && firestore) {
       setIsLoading(true);
       try {
-        await deleteDoc(doc(db, EMPLOYEES_COLLECTION, matricula));
+        await deleteDoc(doc(firestore, EMPLOYEES_COLLECTION, matricula));
         localStorage.removeItem('last_matricula');
         setMatricula(null);
         setEmployeeData(null);

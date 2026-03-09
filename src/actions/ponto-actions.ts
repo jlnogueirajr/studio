@@ -1,7 +1,6 @@
 'use server';
 /**
  * Server Action responsável por realizar o scraping do portal da empresa.
- * Não utiliza Firebase (Admin ou Client) para respeitar a separação de responsabilidades.
  */
 
 import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
@@ -9,18 +8,15 @@ import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/f
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
 /**
- * Extrai TODOS os inputs do HTML, simulando o comportamento do BeautifulSoup no Python.
- * Captura name e value de campos ocultos e visíveis necessários para o ASP.NET.
+ * Extrai TODOS os inputs do HTML, simulando o comportamento do PontoBot.
  */
 function extractAllInputs(html: string) {
   const inputs: Record<string, string> = {};
-  // Regex mais abrangente para capturar inputs ASP.NET
   const inputRegex = /<input\s+[^>]*?name="([^"]+?)"[^>]*?value="([^"]*?)"/gi;
   let match;
   while ((match = inputRegex.exec(html)) !== null) {
     const name = match[1];
     const value = match[2];
-    // Evita capturar botões que não sejam o btnConsultar para não interferir na ação do form
     if (!/btn|submit|button/i.test(name) || name === 'btnConsultar') {
       inputs[name] = value;
     }
@@ -29,7 +25,7 @@ function extractAllInputs(html: string) {
 }
 
 /**
- * Realiza a consulta real no site da empresa simulando o comportamento do PontoBot.
+ * Realiza a consulta no site da empresa.
  */
 export async function fetchAndExtractPonto(matricula: string): Promise<RobustTimeDataExtractionOutput> {
   const now = new Date();
@@ -37,7 +33,6 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
   const year = now.getFullYear();
 
   try {
-    // 1. GET inicial para capturar a sessão e tokens
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: {
@@ -52,18 +47,15 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
 
     const htmlGet = await responseGet.text();
     const setCookie = responseGet.headers.get('set-cookie');
-    // Manter cookies de sessão se fornecidos
     const cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
 
     const allInputs = extractAllInputs(htmlGet);
 
-    // 2. Preparar o POST
     const body = new URLSearchParams();
     Object.entries(allInputs).forEach(([key, value]) => {
       body.append(key, value);
     });
     
-    // Sobrescrever/Adicionar campos vitais para a consulta ASP.NET
     body.set('__EVENTTARGET', 'btnConsultar'); 
     body.set('__EVENTARGUMENT', '');
     body.set('txtMatricula', matricula);
@@ -93,7 +85,6 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       throw new Error("Matrícula não encontrada no portal da empresa.");
     }
 
-    // 3. Extração via IA - Passando o HTML para o fluxo Genkit
     const extracted = await robustTimeDataExtraction({
       htmlContent,
       matricula,
@@ -102,11 +93,12 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     });
 
     if (!extracted || extracted.dailyRecords.length === 0) {
-      throw new Error("Nenhum registro de ponto encontrado para o período atual.");
+      throw new Error("Nenhum registro de ponto encontrado. Verifique se há marcações para o período atual.");
     }
 
     return extracted;
   } catch (error: any) {
+    console.error("Scraping error:", error);
     throw new Error(error.message || "Erro ao consultar portal.");
   }
 }

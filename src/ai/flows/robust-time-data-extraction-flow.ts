@@ -15,10 +15,10 @@ const RobustTimeDataExtractionInputSchema = z.object({
 export type RobustTimeDataExtractionInput = z.infer<typeof RobustTimeDataExtractionInputSchema>;
 
 const TimeRecordSchema = z.object({
-  date: z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/).describe('Data em formato DD/MM/YYYY.'),
-  entryTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).describe('Lista de horários de entrada (HH:MM).'),
-  exitTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).describe('Lista de horários de saída (HH:MM).'),
-  dailyHours: z.string().regex(/^\d{2}:\d{2}$/).describe('Total de horas úteis do dia (HH:MM).'),
+  date: z.string().describe('Data em formato DD/MM/YYYY.'),
+  entryTimes: z.array(z.string()).describe('Lista de horários de entrada (HH:MM).'),
+  exitTimes: z.array(z.string()).describe('Lista de horários de saída (HH:MM).'),
+  dailyHours: z.string().describe('Total de horas úteis do dia (HH:MM).'),
 });
 
 const RobustTimeDataExtractionOutputSchema = z.object({
@@ -33,15 +33,15 @@ const robustTimeDataExtractionPrompt = ai.definePrompt({
   input: {schema: RobustTimeDataExtractionInputSchema},
   output: {schema: RobustTimeDataExtractionOutputSchema},
   prompt: `Você é um especialista em extração de dados de ponto de sistemas corporativos ASP.NET.
-Seu objetivo é extrair TODOS os registros de ponto da matrícula '{{{matricula}}}' referentes ao mês {{{month}}}/{{{year}}}.
+Analise o HTML fornecido para a matrícula '{{{matricula}}}'.
 
-Anote as seguintes regras:
-1. Procure por tabelas (geralmente com ID 'Grid' ou similar) que contenham colunas como "Data", "Entrada", "Saída", "Total".
-2. Se houver horários espalhados no HTML que não estejam em uma tabela óbvia, mas que sigam o padrão HH:MM, agrupe-os por data.
-3. Ignore feriados ou dias sem registros se eles não aparecerem.
-4. Para cada dia encontrado, retorne a data no formato DD/MM/YYYY e os arrays de entradas e saídas.
-
-Importante: O HTML pode conter muitos scripts e campos ocultos, foque apenas nos dados visíveis de horários.
+INSTRUÇÕES DE EXTRAÇÃO:
+1. Procure pela tabela com ID 'Grid' ou qualquer tabela que contenha registros de horários.
+2. Identifique as colunas de Data e os diversos campos de Horários (Entradas e Saídas).
+3. Agrupe os horários por dia.
+4. Extraia todos os registros do mês {{{month}}}/{{{year}}}.
+5. Se encontrar textos como "FOLGA", "FALTA" ou campos vazios, ignore o dia ou trate como sem registros.
+6. Retorne os horários no formato HH:MM.
 
 HTML para processar:
 {{{htmlContent}}}
