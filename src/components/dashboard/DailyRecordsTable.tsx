@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { calculateDailyWorkedMinutes, minutesToTime } from "@/lib/ponto-utils";
 
 interface DailyRecord {
   date: string;
@@ -40,32 +41,37 @@ export function DailyRecordsTable({ records }: DailyRecordsTableProps) {
           </TableHeader>
           <TableBody>
             {records.length > 0 ? (
-              records.map((record) => (
-                <TableRow key={record.date} className="group hover:bg-primary/5">
-                  <TableCell className="font-medium">{record.date}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {record.entryTimes.map((time, i) => (
-                        <Badge key={i} variant="secondary" className="bg-secondary/50 text-secondary-foreground">
-                          {time}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {record.exitTimes.map((time, i) => (
-                        <Badge key={i} variant="outline" className="border-accent text-accent-foreground font-semibold">
-                          {time}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-bold text-primary">
-                    {record.dailyHours}
-                  </TableCell>
-                </TableRow>
-              ))
+              records.map((record) => {
+                const workedMinutes = calculateDailyWorkedMinutes(record.entryTimes, record.exitTimes);
+                const formattedHours = minutesToTime(workedMinutes);
+                
+                return (
+                  <TableRow key={record.date} className="group hover:bg-primary/5">
+                    <TableCell className="font-medium">{record.date}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {record.entryTimes.map((time, i) => (
+                          <Badge key={i} variant="secondary" className="bg-secondary/50 text-secondary-foreground">
+                            {time}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {record.exitTimes.map((time, i) => (
+                          <Badge key={i} variant="outline" className="border-accent text-accent-foreground font-semibold">
+                            {time}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-bold text-primary">
+                      {formattedHours}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             ) : (
               <TableRow>
                 <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">

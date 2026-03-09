@@ -17,7 +17,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
 
-  // Load from local session if available on mount (or handle as simple SPA)
   useEffect(() => {
     const saved = localStorage.getItem('last_matricula');
     if (saved) {
@@ -31,14 +30,10 @@ export default function Home() {
     localStorage.setItem('last_matricula', m);
 
     try {
-      // 1. Check if we have stored data in Firestore
       const stored = await getEmployeeStoredData(m);
-      
-      // 2. Fetch fresh data from the .NET site (simulated)
       const freshExtracted = await fetchAndExtractPonto(m);
       
       if (stored) {
-        // Update stored with new extraction
         const updated: EmployeeData = {
           ...stored,
           lastFetch: new Date().toISOString(),
@@ -47,7 +42,6 @@ export default function Home() {
         setEmployeeData(updated);
         await saveEmployeeData(updated);
       } else {
-        // No previous record, prepare to ask for balance
         const initial: EmployeeData = {
           matricula: m,
           previousBalance: '00:00',
@@ -70,7 +64,9 @@ export default function Home() {
 
   const handleSaveBalance = async (balance: string) => {
     if (employeeData) {
-      const updated = { ...employeeData, previousBalance: balance };
+      // Garantir formato +HH:MM ou -HH:MM se necessário, mas o dialog já ajuda
+      const formattedBalance = balance.includes(':') ? balance : '00:00';
+      const updated = { ...employeeData, previousBalance: formattedBalance };
       setEmployeeData(updated);
       await saveEmployeeData(updated);
       setShowBalanceDialog(false);
@@ -171,7 +167,7 @@ export default function Home() {
             </div>
 
             <SummaryCards 
-              monthSummary={employeeData?.extractedData?.monthSummary || '00:00'} 
+              records={employeeData?.extractedData?.dailyRecords || []} 
               previousBalance={employeeData?.previousBalance || '00:00'} 
             />
 
