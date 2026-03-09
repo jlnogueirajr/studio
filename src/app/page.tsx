@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,12 +8,13 @@ import { DailyRecordsTable } from '@/components/dashboard/DailyRecordsTable';
 import { PreviousBalanceDialog } from '@/components/PreviousBalanceDialog';
 import { fetchAndExtractPonto } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
-import { Trash2, RefreshCcw, LogOut } from 'lucide-react';
+import { Trash2, RefreshCcw, LogOut, Loader2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { useFirestore } from '@/firebase';
+import { useFirestore, useUser, useAuth } from '@/firebase';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { RobustTimeDataExtractionOutput } from '@/ai/flows/robust-time-data-extraction-flow';
+import { signInAnonymously } from 'firebase/auth';
 
 export type EmployeeData = {
   matricula: string;
@@ -21,31 +23,39 @@ export type EmployeeData = {
   extractedData: RobustTimeDataExtractionOutput | null;
 };
 
-const EMPLOYEES_COLLECTION = "employees";
-
 export default function Home() {
   const [matricula, setMatricula] = useState<string | null>(null);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
+  
   const firestore = useFirestore();
+  const auth = useAuth();
+  const { user, isUserLoading } = useUser();
+
+  // Garante que o usuário está autenticado anonimamente para cumprir as regras do Firestore
+  useEffect(() => {
+    if (!isUserLoading && !user && auth) {
+      signInAnonymously(auth).catch(console.error);
+    }
+  }, [user, isUserLoading, auth]);
 
   useEffect(() => {
     const saved = localStorage.getItem('last_matricula');
-    if (saved) {
+    if (saved && user) {
       handleSearch(saved);
     }
-  }, []);
+  }, [user]);
 
   const handleSearch = async (m: string) => {
-    if (!firestore) return;
+    if (!firestore || !user) return;
     setIsLoading(true);
     setMatricula(m);
     localStorage.setItem('last_matricula', m);
 
     try {
-      // Busca no Firestore (Client Side SDK) usando o hook padrão
-      const docRef = doc(firestore, EMPLOYEES_COLLECTION, m);
+      // O caminho agora segue a regra: /users/{userId}/employees/{matricula}
+      const docRef = doc(firestore, 'users', user.uid, 'employees', m);
       const docSnap = await getDoc(docRef);
       const stored = docSnap.exists() ? docSnap.data() as EmployeeData : null;
 
@@ -71,8 +81,8 @@ export default function Home() {
       }
 
       setEmployeeData(updated);
-      // Salva no Firestore
-      await setDoc(doc(firestore, EMPLOYEES_COLLECTION, m), updated, { merge: true });
+      // Salva no Firestore usando o caminho autorizado
+      await setDoc(docRef, updated, { merge: true });
 
     } catch (error: any) {
       console.error(error);
@@ -87,12 +97,13 @@ export default function Home() {
   };
 
   const handleSaveBalance = async (balance: string) => {
-    if (employeeData && matricula && firestore) {
+    if (employeeData && matricula && firestore && user) {
       const formattedBalance = balance.includes(':') ? balance : '00:00';
       const updated = { ...employeeData, previousBalance: formattedBalance };
       setEmployeeData(updated);
       
-      await setDoc(doc(firestore, EMPLOYEES_COLLECTION, matricula), updated, { merge: true });
+      const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
+      await setDoc(docRef, updated, { merge: true });
       
       setShowBalanceDialog(false);
       toast({
@@ -103,10 +114,11 @@ export default function Home() {
   };
 
   const handleClear = async () => {
-    if (matricula && firestore) {
+    if (matricula && firestore && user) {
       setIsLoading(true);
       try {
-        await deleteDoc(doc(firestore, EMPLOYEES_COLLECTION, matricula));
+        const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
+        await deleteDoc(docRef);
         localStorage.removeItem('last_matricula');
         setMatricula(null);
         setEmployeeData(null);
@@ -131,6 +143,14 @@ export default function Home() {
     setMatricula(null);
     setEmployeeData(null);
   };
+
+  if (isUserLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background p-4 md:p-8">
