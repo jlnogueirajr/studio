@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * PONTO ÁGIL SECURITY RULES
+     * 
+     * Core Philosophy:
+     * This ruleset implements a strict User-Ownership model. All application data is 
+     * organized hierarchically under a top-level /users/{userId} path. This structure 
+     * ensures that a user's identity is intrinsically linked to every data access 
+     * request via the document path itself.
+     * 
+     * Data Structure:
+     * - /users/{userId}/employees/{employeeId}: Individual employee records.
+     * - .../monthlyTimeLogs/{logId}: Consolidated monthly data for an employee.
+     * - .../dailyEntries/{entryId}: Specific shift and hour details for a day.
+     * 
+     * Key Security Decisions:
+     * 1. Path-Based Authorization: We use the {userId} wildcard in the path to 
+     *    authorize all operations. This eliminates the need for expensive get() 
+     *    calls to parent documents.
+     * 2. Implicit Denormalization: By nesting data, the authorization context 
+     *    (who owns the data) is preserved throughout the subcollection tree.
+     * 3. Structural Segregation: User data is completely isolated. There are no 
+     *    shared collections or public read/write paths in this application.
+     * 4. Relational Integrity: On creation, we enforce that internal reference 
+     *    IDs (like employeeId or monthlyTimeLogId) match the IDs provided in the path.
+     */
+
+    // --- GLOBAL HELPER FUNCTIONS ---
+
+    /** @description Checks if the request is from an authenticated user. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** @description Validates if the authenticated user matches the owner ID in the path. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Combines ownership check with a check for the existing document's existence. */
+    function isExistingOwner(userId) {
+      return resource != null && isOwner(userId);
+    }
+
+    /** @description Validates that a field in the incoming data has not been modified. */
+    function isUnchanged(field) {
+      return request.resource.data[field] == resource.data[field];
+    }
+
+    // --- COLLECTION RULES ---
+
+    /**
+     * @description Rules for managing employee records owned by a user.
+     * @path /users/{userId}/employees/{employeeId}
+     * @allow (create) if auth.uid matches {userId} and data.id matches {employeeId}.
+     * @deny (list) if auth.uid does not match {userId}.
+     * @principle Path-based ownership and relational integrity for the root entity.
+     */
+    match /users/{userId}/employees/{employeeId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == employeeId;
+      allow update: if isExistingOwner(userId) && isUnchanged('id');
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for monthly time logs associated with an employee.
+       * @path /users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}
+       * @allow (get) if auth.uid matches {userId}.
+       * @deny (create) if data.employeeId does not match {employeeId} in the path.
+       * @principle Ensures monthly logs are correctly linked to their parent employee.
+       */
+      match /monthlyTimeLogs/{monthlyTimeLogId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.employeeId == employeeId;
+        allow update: if isExistingOwner(userId) && isUnchanged('employeeId');
+        allow delete: if isExistingOwner(userId);
+
+        /**
+         * @description Rules for daily entries within a specific monthly log.
+         * @path /users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}/dailyEntries/{dailyEntryId}
+         * @allow (create) if auth.uid matches {userId} and dailyEntry links to monthlyTimeLogId.
+         * @deny (update) if user tries to move the entry to a different monthly log.
+         * @principle Deeply nested path-based security and relational immutability.
+         */
+        match /dailyEntries/{dailyEntryId} {
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && request.resource.data.monthlyTimeLogId == monthlyTimeLogId;
+          allow update: if isExistingOwner(userId) && isUnchanged('monthlyTimeLogId');
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+    }
+    
+    // Default deny for any paths not explicitly matched.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
