@@ -1,7 +1,8 @@
+
 'use server';
 /**
  * Server Action que realiza a consulta COMPLETA do mês no portal.
- * Implementa a lógica de navegação em calendário do script Python de forma robusta.
+ * Refinado para capturar horários em tabelas ASP.NET dinâmicas.
  */
 
 import https from 'https';
@@ -9,8 +10,7 @@ import https from 'https';
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
 /**
- * Extrai todos os campos de formulário (inputs) de forma robusta,
- * independente da ordem dos atributos name/value ou tipo de aspas.
+ * Extrai todos os campos de formulário (inputs) de forma robusta.
  */
 function extractAllInputs(html: string) {
   const inputs: Record<string, string> = {};
@@ -28,20 +28,36 @@ function extractAllInputs(html: string) {
 }
 
 /**
- * Extrai horários (HH:MM) de dentro da tabela "Grid".
+ * Extrai horários (HH:MM) de dentro da tabela "Grid" ou da resposta do servidor.
+ * Agora mais flexível para capturar 00:20, 16:14, etc.
  */
 function extractTimes(html: string): string[] {
   const times: string[] = [];
-  // Foca na área da tabela Grid para evitar pegar horários de outros lugares (como rodapés)
+  
+  // Tenta focar na área do Grid, mas se não achar (AJAX response), olha o HTML todo
   const gridMatch = html.match(/id="Grid"[\s\S]*?<\/table>/i);
   const searchArea = gridMatch ? gridMatch[0] : html;
   
-  const timeRegex = /([0-2][0-9]:[0-5][0-9])/g;
+  // Regex busca HH:MM dentro de tags <td> ou áreas de texto puro
+  // Captura formatos como 08:00, 8:00, 00:20
+  const timeRegex = />\s*([0-2]?\d:[0-5]\d)\s*</g;
   let match;
   while ((match = timeRegex.exec(searchArea)) !== null) {
     times.push(match[1]);
   }
-  // Remove duplicatas (comum se houver erro de renderização no portal)
+
+  // Fallback: se não achar com as tags, tenta busca plana de horários isolados
+  if (times.length === 0) {
+    const flatRegex = /\b([0-2]?\d:[0-5]\d)\b/g;
+    let flatMatch;
+    while ((flatMatch = flatRegex.exec(searchArea)) !== null) {
+      // Evita pegar o "07:20" da meta ou horários fixos do portal
+      if (!searchArea.includes('Meta') && !searchArea.includes('Carga Horária')) {
+         times.push(flatMatch[1]);
+      }
+    }
+  }
+
   return Array.from(new Set(times));
 }
 
@@ -72,10 +88,13 @@ export async function fetchMonthData(matricula: string, month: number, year: num
   const results: { date: string, times: string[] }[] = [];
 
   try {
-    // 1. GET Inicial para obter VIEWSTATE e Cookies de sessão
+    // 1. GET Inicial
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+      },
       // @ts-ignore
       agent
     });
@@ -86,7 +105,11 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     const calendarMap = extractCalendarMap(html, month);
     const daysToFetch = Object.keys(calendarMap).map(Number).sort((a, b) => a - b);
 
-    // 2. Itera sobre os dias do mês até hoje (ou fim do mês consultado)
+    if (daysToFetch.length === 0) {
+      throw new Error("Não foi possível localizar o calendário do mês selecionado.");
+    }
+
+    // 2. Itera sobre os dias
     const today = new Date();
     const isCurrentMonth = today.getMonth() + 1 === month && today.getFullYear() === year;
     const lastDayToFetch = isCurrentMonth ? today.getDate() : 31;
@@ -100,7 +123,6 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       const body = new URLSearchParams();
       Object.entries(inputs).forEach(([k, v]) => body.append(k, v));
       
-      // Simula clique no dia do calendário (necessário para atualizar o contexto do servidor)
       body.set('__EVENTTARGET', 'Calendar');
       body.set('__EVENTARGUMENT', dayArg);
       body.set('txtMatricula', matricula);
@@ -111,7 +133,8 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
-          'User-Agent': 'Mozilla/5.0'
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': TARGET_URL
         },
         // @ts-ignore
         agent,
@@ -119,11 +142,10 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       });
       
       html = await respDay.text();
-      // Atualiza cookies se houver novos
       const newDayCookies = respDay.headers.getSetCookie();
       if (newDayCookies.length > 0) cookies = [...new Set([...cookies, ...newDayCookies])];
 
-      // 3. Clica em "Consultar" para carregar o Grid de horários do dia selecionado
+      // 3. Consultar
       const inputsConsultar = extractAllInputs(html);
       const bodyConsultar = new URLSearchParams();
       Object.entries(inputsConsultar).forEach(([k, v]) => bodyConsultar.append(k, v));
@@ -138,7 +160,9 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
-          'User-Agent': 'Mozilla/5.0'
+          'User-Agent': 'Mozilla/5.0',
+          'Referer': TARGET_URL,
+          'X-MicrosoftAjax': 'Delta=true'
         },
         // @ts-ignore
         agent,
@@ -153,15 +177,13 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         times
       });
       
-      // Prepara o HTML para a próxima iteração (próximo dia)
+      // Prepara próximo loop
       html = htmlFinal;
-      const newFinalCookies = respFinal.headers.getSetCookie();
-      if (newFinalCookies.length > 0) cookies = [...new Set([...cookies, ...newFinalCookies])];
     }
 
     return results;
   } catch (error: any) {
     console.error("Erro na consulta mensal:", error);
-    throw new Error(error.message || "Falha ao consultar mês completo.");
+    throw new Error(error.message || "Falha ao consultar portal.");
   }
 }
