@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -94,14 +95,13 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                // Verifica se houve minutos noturnos para exibir ícone
                 let hasNight = false;
                 const entries = sorted.filter((_, i) => i % 2 === 0);
                 const exits = sorted.filter((_, i) => i % 2 !== 0);
                 for (let i = 0; i < Math.min(entries.length, exits.length); i++) {
                   const start = timeToMinutes(entries[i]);
                   let end = timeToMinutes(exits[i]);
-                  if (calculateNightMinutes(start, end < start ? end + 1440 : end) > 0) hasNight = true;
+                  if (calculateNightMinutes(start || 0, (end < (start || 0) ? end + 1440 : end)) > 0) hasNight = true;
                 }
                 
                 let goalForDay = 0;

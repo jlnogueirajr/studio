@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2, Lock, UserPlus, Key } from 'lucide-react';
+import { Search, Loader2, UserPlus, Key } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useFirestore } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -30,18 +30,15 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
 
     setCheckingMatricula(true);
     try {
-      // Especial para admin hardcoded
-      if (matricula === '000000') {
-        setIsNewUser(false);
-        setStep('password');
-      } else {
-        const docRef = doc(firestore, 'userProfiles', matricula);
-        const docSnap = await getDoc(docRef);
-        setIsNewUser(!docSnap.exists());
-        setStep('password');
-      }
+      // Verifica no Firestore se o perfil já existe
+      const docRef = doc(firestore, 'userProfiles', matricula);
+      const docSnap = await getDoc(docRef);
+      
+      // Se o documento não existe, é o primeiro acesso
+      setIsNewUser(!docSnap.exists());
+      setStep('password');
     } catch (error) {
-      console.error(error);
+      console.error("Erro ao verificar matrícula:", error);
     } finally {
       setCheckingMatricula(false);
     }
@@ -68,15 +65,15 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
             <Key className="w-8 h-8 text-primary" />
           )}
         </div>
-        <CardTitle className="text-2xl font-black text-center text-slate-800">
-          {step === 'matricula' ? 'ACESSAR PONTO' : isNewUser ? 'PRIMEIRO ACESSO' : 'INFORME SUA SENHA'}
+        <CardTitle className="text-2xl font-black text-center text-slate-800 uppercase">
+          {step === 'matricula' ? 'Acessar Ponto' : isNewUser ? 'Primeiro Acesso' : 'Entrar no Sistema'}
         </CardTitle>
         <CardDescription className="text-center font-bold">
           {step === 'matricula' 
             ? 'Digite sua matrícula para começar.' 
             : isNewUser 
-              ? 'Defina uma senha segura para seus próximos acessos.' 
-              : `Bem-vindo de volta! Digite a senha da matrícula ${matricula}.`}
+              ? 'Crie uma senha para seus próximos acessos.' 
+              : `Digite a senha para a matrícula ${matricula}.`}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -98,7 +95,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
               disabled={checkingMatricula || isLoading || !matricula.trim()} 
               className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
             >
-              {checkingMatricula ? <Loader2 className="animate-spin" /> : 'Continuar'}
+              {checkingMatricula ? <Loader2 className="animate-spin" /> : 'Verificar Matrícula'}
             </Button>
           </form>
         ) : (
@@ -134,7 +131,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 disabled={isLoading || !password.trim()} 
                 className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
               >
-                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Criar Acesso' : 'Entrar'}
+                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar e Entrar' : 'Fazer Login'}
               </Button>
               <Button 
                 type="button" 

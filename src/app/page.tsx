@@ -105,7 +105,8 @@ export default function Home() {
         } as EmployeeData);
       }
     } catch (e) { 
-      toast({ variant: "destructive", title: "Erro ao carregar dados" }); 
+      console.error("Erro ao carregar dados:", e);
+      toast({ variant: "destructive", title: "Erro ao carregar dados do banco" }); 
     } finally { 
       setIsLoading(false); 
     }
@@ -118,13 +119,12 @@ export default function Home() {
 
     try {
       if (isSignUp) {
-        const userCred = await createUserWithEmailAndPassword(auth, email, p);
+        await createUserWithEmailAndPassword(auth, email, p);
         const now = new Date().toISOString();
         const profile = {
           id: m,
           registrationNumber: m,
           email: email,
-          initialPreviousMonthBalanceHours: 0,
           createdAt: now,
           updatedAt: now,
           isAdmin: m === '000000',
@@ -141,12 +141,23 @@ export default function Home() {
       
       localStorage.setItem('logged_matricula', m);
       await loadEmployeeData(m);
-      toast({ title: isSignUp ? "Conta criada com sucesso!" : "Login realizado!" });
+      toast({ title: isSignUp ? "Conta criada com sucesso!" : "Login realizado com sucesso!" });
     } catch (e: any) {
+      console.error("Erro Auth:", e);
+      let errorMsg = "Tente novamente mais tarde.";
+      
+      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+        errorMsg = "Senha incorreta ou matrícula não localizada.";
+      } else if (e.code === 'auth/email-already-in-use') {
+        errorMsg = "Esta matrícula já possui uma conta cadastrada.";
+      } else if (e.code === 'auth/weak-password') {
+        errorMsg = "A senha deve ter no mínimo 6 caracteres.";
+      }
+
       toast({ 
         variant: "destructive", 
-        title: "Erro de autenticação", 
-        description: e.code === 'auth/wrong-password' ? "Senha incorreta" : e.message 
+        title: "Erro de Autenticação", 
+        description: errorMsg
       });
     } finally {
       setIsLoading(false);
@@ -180,9 +191,6 @@ export default function Home() {
         year: now.getFullYear(), 
         month: now.getMonth() + 1,
         scrapedAt: new Date().toISOString(),
-        totalScrapedHours: 0,
-        calculatedMonthlyBalanceHours: 0,
-        cumulativeBalanceHours: 0
       }, { merge: true });
 
       normalizedData.forEach(record => {
@@ -192,13 +200,12 @@ export default function Home() {
           ...record, 
           id: dayId, 
           monthlyPointSummaryId: mYear,
-          calculatedDailyHours: 0 
         }, { merge: true });
       });
 
       await batch.commit();
       await loadEmployeeData(matricula);
-      toast({ title: "Sincronizado com sucesso!" });
+      toast({ title: "Portal sincronizado!" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
     } finally {
@@ -214,7 +221,7 @@ export default function Home() {
         <header className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div className="space-y-1 text-center md:text-left">
             <h1 className="text-4xl font-black text-primary tracking-tight">Ponto <span className="text-slate-900">Ágil</span></h1>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Gestão de Horas e Escalas</p>
+            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Controle de Jornada</p>
           </div>
           {matricula && (
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -243,13 +250,8 @@ export default function Home() {
           <AdminPanel />
         ) : isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
-            <div className="relative">
-               <RefreshCcw className="w-16 h-16 text-primary animate-spin" />
-               <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-2 h-2 bg-primary rounded-full" />
-               </div>
-            </div>
-            <h2 className="text-2xl font-black text-slate-800 uppercase animate-pulse">Consultando Portal de RH...</h2>
+            <RefreshCcw className="w-16 h-16 text-primary animate-spin" />
+            <h2 className="text-2xl font-black text-slate-800 uppercase animate-pulse">Consultando Portal...</h2>
           </div>
         ) : (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -299,7 +301,7 @@ export default function Home() {
               }, { merge: true });
               setShowBalanceDialog(false);
               loadEmployeeData(matricula);
-              toast({ title: "Saldos iniciais atualizados!" });
+              toast({ title: "Saldos atualizados!" });
             }
           }} onClose={() => setShowBalanceDialog(false)} />
         
@@ -342,7 +344,7 @@ export default function Home() {
                 await setDoc(dayRef, { times, ...options }, { merge: true });
                 await loadEmployeeData(matricula);
                 setEditingRecord(null);
-                toast({ title: "Horários atualizados manualmente!" });
+                toast({ title: "Ajuste manual salvo!" });
               }
             }} onClose={() => setEditingRecord(null)} 
           />
