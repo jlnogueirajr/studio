@@ -17,6 +17,7 @@ import { signInAnonymously } from 'firebase/auth';
 export type DailyRecord = {
   date: string;
   times: string[];
+  monthlyTimeLogId?: string;
 };
 
 export type EmployeeData = {
@@ -36,12 +37,16 @@ export default function Home() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
 
+  // Autenticação anônima obrigatória para acesso ao Firestore
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
-      signInAnonymously(auth).catch(console.error);
+      signInAnonymously(auth).catch((err) => {
+        console.error("Erro ao autenticar anonimamente:", err);
+      });
     }
   }, [user, isUserLoading, auth]);
 
+  // Carrega a matrícula salva no localStorage
   useEffect(() => {
     const saved = localStorage.getItem('last_matricula');
     if (saved && user && firestore) {
@@ -55,34 +60,54 @@ export default function Home() {
     setMatricula(m);
 
     try {
+      const now = new Date();
+      const monthYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+      
       const docRef = doc(firestore, 'users', user.uid, 'employees', m);
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
         const base = docSnap.data() as any;
-        // Carrega registros diários da subcoleção
-        const logsRef = collection(firestore, 'users', user.uid, 'employees', m, 'dailyEntries');
+        
+        // Carrega registros diários do mês atual da subcoleção aninhada
+        const logsRef = collection(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries');
         const logsSnap = await getDocs(logsRef);
         const records = logsSnap.docs.map(d => d.data() as DailyRecord);
         
         setEmployeeData({
           ...base,
-          dailyRecords: records.sort((a, b) => b.date.localeCompare(a.date))
+          dailyRecords: records.sort((a, b) => {
+             // Formato dd/mm/yyyy -> yyyymmdd para sort
+             const dateA = a.date.split('/').reverse().join('');
+             const dateB = b.date.split('/').reverse().join('');
+             return dateB.localeCompare(dateA);
+          })
         });
       } else {
-        setMatricula(m);
         setEmployeeData(null);
-        handleSearch(m); // Primeira busca
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("Erro ao carregar dados:", e);
+      toast({
+        variant: "destructive",
+        title: "Erro ao carregar",
+        description: "Não foi possível recuperar seus dados salvos."
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSearch = async (m: string) => {
-    if (!firestore || !user) return;
+    if (!firestore || !user) {
+      toast({
+        variant: "destructive",
+        title: "Aguarde...",
+        description: "O sistema de banco de dados ainda está inicializando."
+      });
+      return;
+    }
+    
     setIsLoading(true);
     setMatricula(m);
     localStorage.setItem('last_matricula', m);
@@ -91,34 +116,58 @@ export default function Home() {
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
+      const monthYear = `${year}-${month.toString().padStart(2, '0')}`;
 
-      // Busca dados online do mês todo (Lógica PontoBot)
+      // 1. Busca dados no portal (Server Action)
       const freshData = await fetchMonthData(m, month, year);
       
-      const docRef = doc(firestore, 'users', user.uid, 'employees', m);
-      const docSnap = await getDoc(docRef);
-      const stored = docSnap.exists() ? docSnap.data() : null;
+      // 2. Prepara referências do Firestore conforme Rules
+      const batch = writeBatch(firestore);
+      
+      // Documento do Empregado
+      const empRef = doc(firestore, 'users', user.uid, 'employees', m);
+      const empSnap = await getDoc(empRef);
+      const stored = empSnap.exists() ? empSnap.data() : null;
 
-      const newEmployeeBase = {
-        matricula: m,
+      const employeeBase = {
+        id: m,
+        registrationNumber: m,
+        expectedMonthlyHours: 160, // Padrão
         previousBalance: stored?.previousBalance || '00:00',
         lastFetch: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdAt: stored?.createdAt || new Date().toISOString()
       };
+      batch.set(empRef, employeeBase, { merge: true });
 
-      // Salva no Firestore
-      await setDoc(docRef, newEmployeeBase, { merge: true });
-      
-      // Salva cada dia em lote
-      const batch = writeBatch(firestore);
+      // Documento do Log Mensal
+      const logRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear);
+      batch.set(logRef, {
+        id: monthYear,
+        employeeId: m,
+        year: year,
+        month: month,
+        fetchedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Documentos das Entradas Diárias
       freshData.forEach(record => {
         const dayId = record.date.replace(/\//g, '-');
-        const dayRef = doc(firestore, 'users', user.uid, 'employees', m, 'dailyEntries', dayId);
-        batch.set(dayRef, record);
+        const dayRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries', dayId);
+        batch.set(dayRef, {
+          ...record,
+          id: dayId,
+          monthlyTimeLogId: monthYear,
+          dailyTotalHours: 0 // Calculado no front
+        });
       });
+
       await batch.commit();
 
       setEmployeeData({
-        ...newEmployeeBase,
+        matricula: m,
+        previousBalance: employeeBase.previousBalance,
+        lastFetch: employeeBase.lastFetch,
         dailyRecords: freshData
       });
 
@@ -128,14 +177,15 @@ export default function Home() {
 
       toast({
         title: "Sincronização concluída",
-        description: `${freshData.length} dias importados do portal.`
+        description: `${freshData.length} dias importados com sucesso.`
       });
 
     } catch (error: any) {
+      console.error("Erro na sincronização:", error);
       toast({
         variant: "destructive",
         title: "Erro na consulta",
-        description: error.message || "Não foi possível carregar os dados."
+        description: error.message || "Falha ao acessar o portal ou salvar dados."
       });
     } finally {
       setIsLoading(false);
@@ -145,13 +195,18 @@ export default function Home() {
   const handleSaveBalance = async (balance: string) => {
     if (employeeData && matricula && firestore && user) {
       const formattedBalance = balance.includes(':') ? balance : '00:00';
-      const updated = { ...employeeData, previousBalance: formattedBalance };
-      setEmployeeData(updated);
       
-      const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
-      await setDoc(docRef, { previousBalance: formattedBalance }, { merge: true });
-      
-      setShowBalanceDialog(false);
+      try {
+        const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
+        await setDoc(docRef, { previousBalance: formattedBalance }, { merge: true });
+        
+        setEmployeeData({ ...employeeData, previousBalance: formattedBalance });
+        setShowBalanceDialog(false);
+        
+        toast({ title: "Saldo atualizado" });
+      } catch (e) {
+        toast({ variant: "destructive", title: "Erro ao salvar saldo" });
+      }
     }
   };
 
@@ -164,6 +219,7 @@ export default function Home() {
         localStorage.removeItem('last_matricula');
         setMatricula(null);
         setEmployeeData(null);
+        toast({ title: "Dados removidos localmente" });
       } catch (e) {} finally { setIsLoading(false); }
     }
   };
@@ -200,8 +256,8 @@ export default function Home() {
           <div className="py-20 flex flex-col items-center justify-center gap-4 text-center">
             <RefreshCcw className="w-12 h-12 text-primary animate-spin" />
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Sincronizando Mês...</h2>
-              <p className="text-muted-foreground">Lendo dia por dia do calendário portal. Isso pode levar alguns segundos.</p>
+              <h2 className="text-xl font-semibold">Sincronizando Calendário...</h2>
+              <p className="text-muted-foreground">Isso pode levar até 30 segundos dependendo da velocidade do portal.</p>
             </div>
           </div>
         ) : (
