@@ -24,22 +24,27 @@ export function minutesToTime(totalMinutes: number, showSign = false): string {
 
 /**
  * Ordena horários do dia. 
- * Lógica: batidas da madrugada (< 05:00) são o fim da jornada do dia anterior.
+ * Lógica: batidas da madrugada (< 05:00) são tratadas como fim da jornada do dia anterior,
+ * garantindo que a sequência cronológica de entrada/saída seja respeitada.
  */
 export function sortPontoHours(hours: string[]): string[] {
   if (!hours || hours.length === 0) return [];
   
-  const norm = hours.filter(h => {
-    const hrs = parseInt(h.split(':')[0]);
-    return hrs >= 5;
-  }).sort();
+  const sorted = [...hours].sort((a, b) => {
+      const minA = timeToMinutes(a);
+      const minB = timeToMinutes(b);
+      
+      // Se um horário é madrugada (<5h) e o outro não (>5h), a madrugada vem depois
+      const isAMad = minA < 300; // 5:00 = 300min
+      const isBMad = minB < 300;
+      
+      if (isAMad && !isBMad) return 1;
+      if (!isAMad && isBMad) return -1;
+      
+      return minA - minB;
+  });
   
-  const mad = hours.filter(h => {
-    const hrs = parseInt(h.split(':')[0]);
-    return hrs < 5;
-  }).sort();
-  
-  return [...norm, ...mad];
+  return sorted;
 }
 
 /**
@@ -47,7 +52,7 @@ export function sortPontoHours(hours: string[]): string[] {
  */
 export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: string[]): number {
   let totalWorked = 0;
-  const NIGHT_FACTOR = 60 / 52.5; // Fator para hora reduzida (1.142857)
+  const NIGHT_FACTOR = 60 / 52.5; // Fator de hora reduzida (1.142857)
 
   const pairsCount = Math.min(entryTimes.length, exitTimes.length);
 
@@ -61,10 +66,11 @@ export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: str
     const totalDuration = end - start;
     let nightMinutes = 0;
 
-    // Intervalo noturno: 22h às 05h (1320m às 1740m no tempo linear)
+    // Intervalo noturno: 22h às 05h (1320m às 1740m no tempo linear acumulado)
     const nightStart = 22 * 60;
-    const nightEnd = 29 * 60; // 05h do dia seguinte
+    const nightEnd = 29 * 60; // 05h do dia seguinte (24h + 5h)
     
+    // Interseção com o período noturno do dia atual/seguinte
     const intersectionStart = Math.max(start, nightStart);
     const intersectionEnd = Math.min(end, nightEnd);
     
@@ -74,13 +80,11 @@ export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: str
 
     // Caso de batidas que começam na madrugada do dia atual (00h às 05h)
     const earlyNightEnd = 5 * 60;
-    const earlyIntersectionEnd = Math.min(start, earlyNightEnd);
     if (start < earlyNightEnd) {
-        // Se a batida inteira começou antes das 5h, precisamos checar o quanto foi antes
-        const intersectionStart2 = Math.max(start, 0);
-        const intersectionEnd2 = Math.min(end, earlyNightEnd);
-        if (intersectionStart2 < intersectionEnd2) {
-            nightMinutes += (intersectionEnd2 - intersectionStart2);
+        const earlyIntersectionStart = Math.max(start, 0);
+        const earlyIntersectionEnd = Math.min(end, earlyNightEnd);
+        if (earlyIntersectionStart < earlyIntersectionEnd) {
+            nightMinutes += (earlyIntersectionEnd - earlyIntersectionStart);
         }
     }
 

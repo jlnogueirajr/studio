@@ -2,28 +2,26 @@
 'use server';
 /**
  * Server Action que realiza a consulta COMPLETA do mês no portal.
- * Suporta extração de dados de respostas parciais (Delta) do ASP.NET AJAX.
+ * Implementa a lógica de navegação ASP.NET AJAX para percorrer todos os dias.
  */
 
 import https from 'https';
 
 /**
- * Extrai campos ocultos de um HTML completo ou de uma resposta Delta AJAX.
+ * Extrai campos ocultos do ASP.NET (ViewState, Validation, etc) de HTML ou Delta AJAX.
  */
 function updateFields(html: string, currentFields: Record<string, string>): Record<string, string> {
   const fields = { ...currentFields };
   
-  // Se for uma resposta Delta (formato: |length|type|id|content|)
+  // Se for resposta Delta (|length|type|id|content|)
   if (html.includes('|')) {
     const parts = html.split('|');
     for (let i = 0; i < parts.length; i++) {
-      // Campos ocultos comuns no Delta
       if (parts[i] === 'hiddenField') {
         const name = parts[i + 1];
         const value = parts[i + 2];
         if (name) fields[name] = value;
       }
-      // ViewState e outros campos específicos podem vir em blocos nomeados
       if (['__VIEWSTATE', '__EVENTVALIDATION', '__VIEWSTATEGENERATOR'].includes(parts[i])) {
         fields[parts[i]] = parts[i + 1];
       }
@@ -41,25 +39,32 @@ function updateFields(html: string, currentFields: Record<string, string>): Reco
 }
 
 /**
- * Extrai horários (HH:MM) da tabela 'Grid'.
+ * Extrai horários da tabela Grid de forma robusta.
  */
 function extractTimesFromGrid(html: string): string[] {
   const times: string[] = [];
-  // Busca especificamente dentro da área onde o Grid costuma aparecer
-  const gridMatch = html.match(/id="Grid"[\s\S]*?<\/table>/i);
-  const content = gridMatch ? gridMatch[0] : html;
-
-  // Regex flexível para capturar HH:MM
+  // Localiza a parte do HTML que contém o Grid para evitar falsos positivos do cabeçalho
+  const gridStart = html.indexOf('id="Grid"');
+  if (gridStart === -1) return [];
+  
+  const content = html.substring(gridStart);
+  
+  // Regex que busca HH:MM dentro de tags (td, span, etc)
   const timeRegex = />\s*([0-2]?\d:[0-5]\d)\s*</g;
   let match;
   while ((match = timeRegex.exec(content)) !== null) {
     times.push(match[1]);
   }
-  return Array.from(new Set(times));
+  
+  // Remove duplicados e garante formato 00:00
+  return Array.from(new Set(times)).map(t => {
+      const parts = t.split(':');
+      return `${parts[0].padStart(2, '0')}:${parts[1]}`;
+  });
 }
 
 /**
- * Mapeia os argumentos do PostBack para cada dia do calendário.
+ * Identifica os argumentos do PostBack para os dias do mês solicitado.
  */
 function extractCalendarArguments(html: string, targetMonth: number): Record<number, string> {
   const map: Record<number, string> = {};
@@ -81,13 +86,14 @@ function extractCalendarArguments(html: string, targetMonth: number): Record<num
 }
 
 export async function fetchMonthData(matricula: string, month: number, year: number) {
-  // Ignora erros de certificado SSL para o portal interno
+  // Ignora SSL para o portal interno
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
   
   const results: { date: string, times: string[] }[] = [];
   const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
   try {
+    // 0. GET inicial
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: { 'User-Agent': 'Mozilla/5.0' }
@@ -101,19 +107,20 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     const daysToFetch = Object.keys(calendarArgs).map(Number).sort((a, b) => a - b);
 
     if (daysToFetch.length === 0) {
-      throw new Error("Não foi possível localizar o calendário. Verifique a matrícula.");
+      throw new Error("Calendário não localizado. Verifique a matrícula ou o mês.");
     }
 
     const today = new Date();
     const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month < (today.getMonth() + 1));
     const lastDayToFetch = isPastMonth ? 31 : today.getDate();
 
+    // Loop por todos os dias do mês até o dia atual
     for (const day of daysToFetch) {
       if (day > lastDayToFetch) break;
 
       const dayArg = calendarArgs[day];
       
-      // Passo 1: Selecionar o dia no calendário
+      // PASSO 1: Selecionar o dia no calendário
       const bodyDay = new URLSearchParams();
       Object.entries(hiddenFields).forEach(([k, v]) => bodyDay.append(k, v));
       bodyDay.set('__EVENTTARGET', 'Calendar');
@@ -126,7 +133,8 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
-          'X-MicrosoftAjax': 'Delta=true'
+          'X-MicrosoftAjax': 'Delta=true',
+          'User-Agent': 'Mozilla/5.0'
         },
         body: bodyDay.toString()
       });
@@ -137,7 +145,7 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       const newCookies = respDay.headers.getSetCookie();
       if (newCookies.length > 0) cookies = newCookies;
 
-      // Passo 2: Clicar em Consultar para o dia
+      // PASSO 2: Consultar horários do dia selecionado
       const bodyConsultar = new URLSearchParams();
       Object.entries(hiddenFields).forEach(([k, v]) => bodyConsultar.append(k, v));
       bodyConsultar.set('__EVENTTARGET', 'btnConsultar');
@@ -149,7 +157,8 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
-          'X-MicrosoftAjax': 'Delta=true'
+          'X-MicrosoftAjax': 'Delta=true',
+          'User-Agent': 'Mozilla/5.0'
         },
         body: bodyConsultar.toString()
       });
@@ -164,12 +173,13 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         });
       }
       
+      // Atualiza campos para o próximo dia no loop
       hiddenFields = updateFields(deltaHtmlFinal, hiddenFields);
     }
 
     return results;
   } catch (error: any) {
-    console.error("Erro na consulta do mês:", error);
-    throw new Error(error.message || "Falha ao conectar com o portal.");
+    console.error("Erro na extração completa:", error);
+    throw new Error(error.message || "Falha ao consultar o portal.");
   }
 }
