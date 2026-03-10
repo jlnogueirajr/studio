@@ -88,15 +88,21 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
         
-        // Preencher lacunas do mês (dias sem batida no portal)
-        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-        const lastDayToRender = (currentMonth === (new Date().getMonth() + 1) && currentYear === new Date().getFullYear()) 
+        // Determinar o ano base para renderização (se houver dados do portal com ano diferente, priorizar o ano dos dados)
+        let displayYear = currentYear;
+        if (rawRecords.length > 0) {
+          const firstDate = rawRecords[0].date.split('/');
+          if (firstDate.length === 3) displayYear = parseInt(firstDate[2]);
+        }
+
+        const daysInMonth = new Date(displayYear, currentMonth, 0).getDate();
+        const lastDayToRender = (currentMonth === (new Date().getMonth() + 1) && displayYear === new Date().getFullYear()) 
           ? new Date().getDate() 
           : daysInMonth;
 
         const fullMonthRecords: DailyRecord[] = [];
         for (let d = 1; d <= lastDayToRender; d++) {
-          const dateStr = `${d.toString().padStart(2, '0')}/${currentMonth.toString().padStart(2, '0')}/${currentYear}`;
+          const dateStr = `${d.toString().padStart(2, '0')}/${currentMonth.toString().padStart(2, '0')}/${displayYear}`;
           const existing = rawRecords.find(r => r.date === dateStr);
           if (existing) {
             fullMonthRecords.push(existing);

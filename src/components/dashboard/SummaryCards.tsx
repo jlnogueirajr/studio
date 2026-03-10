@@ -40,12 +40,12 @@ export function SummaryCards({
 
       const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
       
-      const isMetaZeroDay = calendarDsr || 
+      const isMetaZeroDay = (calendarDsr || 
                           calendarHoliday || 
                           record.isManualDsr || 
                           record.isHoliday || 
                           record.isBankOff || 
-                          record.isCompensation;
+                          record.isCompensation) && !record.isManualWork;
 
       const sorted = sortPontoHours(record.times);
       const dailyWorked = calculateDailyWorkedMinutes(

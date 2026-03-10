@@ -80,12 +80,13 @@ export function DailyRecordsTable({
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
-                const isMetaZeroDay = calendarDsr || 
+                // Priorizar ajustes manuais sobre a escala automática
+                const isMetaZeroDay = (calendarDsr || 
                                     calendarHoliday || 
                                     record.isManualDsr || 
                                     record.isHoliday || 
                                     record.isBankOff || 
-                                    record.isCompensation;
+                                    record.isCompensation) && !record.isManualWork;
 
                 const isNoTime = !record.times || record.times.length === 0;
                 const sorted = sortPontoHours(record.times);
