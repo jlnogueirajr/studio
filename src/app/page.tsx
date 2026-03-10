@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,9 +6,11 @@ import { MatriculaInput } from '@/components/MatriculaInput';
 import { SummaryCards } from '@/components/dashboard/SummaryCards';
 import { DailyRecordsTable } from '@/components/dashboard/DailyRecordsTable';
 import { PreviousBalanceDialog } from '@/components/PreviousBalanceDialog';
+import { DsrSettingsDialog } from '@/components/DsrSettingsDialog';
+import { EditTimesDialog } from '@/components/EditTimesDialog';
 import { fetchMonthData } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
-import { Trash2, RefreshCcw, LogOut, Loader2, Calendar } from 'lucide-react';
+import { Trash2, RefreshCcw, LogOut, Loader2, Calendar, Settings } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
@@ -15,6 +18,7 @@ import { doc, getDoc, setDoc, deleteDoc, collection, getDocs, writeBatch } from 
 import { signInAnonymously } from 'firebase/auth';
 
 export type DailyRecord = {
+  id: string;
   date: string;
   times: string[];
   monthlyTimeLogId?: string;
@@ -24,6 +28,7 @@ export type EmployeeData = {
   matricula: string;
   previousBalance: string;
   lastFetch: string;
+  fixedDsrDays: number[];
   dailyRecords: DailyRecord[];
 };
 
@@ -32,6 +37,8 @@ export default function Home() {
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
+  const [showDsrDialog, setShowDsrDialog] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<DailyRecord | null>(null);
   
   const firestore = useFirestore();
   const auth = useAuth();
@@ -71,7 +78,7 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const records = logsSnap.docs.map(d => d.data() as DailyRecord);
         
-        // ORDEM DECRESCENTE: Datas atuais no topo
+        // ORDEM DECRESCENTE para o topo
         const sortedRecords = records.sort((a, b) => {
            const [dayA, monthA, yearA] = a.date.split('/').map(Number);
            const [dayB, monthB, yearB] = b.date.split('/').map(Number);
@@ -82,33 +89,23 @@ export default function Home() {
 
         setEmployeeData({
           ...base,
-          dailyRecords: sortedRecords
+          matricula: m,
+          dailyRecords: sortedRecords,
+          fixedDsrDays: base.fixedDsrDays || [0] // Default Domingo
         });
       } else {
         setEmployeeData(null);
       }
     } catch (e: any) {
       console.error("Erro ao carregar dados:", e);
-      toast({
-        variant: "destructive",
-        title: "Erro ao carregar",
-        description: "Não foi possível recuperar seus dados salvos."
-      });
+      toast({ variant: "destructive", title: "Erro ao carregar dados" });
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleSearch = async (m: string) => {
-    if (!firestore || !user) {
-      toast({
-        variant: "destructive",
-        title: "Aguarde...",
-        description: "O sistema ainda está inicializando."
-      });
-      return;
-    }
-    
+    if (!firestore || !user) return;
     setIsLoading(true);
     setMatricula(m);
     localStorage.setItem('last_matricula', m);
@@ -121,12 +118,7 @@ export default function Home() {
 
       const freshData = await fetchMonthData(m, month, year);
       
-      if (freshData.length === 0) {
-          throw new Error("Nenhum horário encontrado. Verifique sua matrícula.");
-      }
-
       const batch = writeBatch(firestore);
-      
       const empRef = doc(firestore, 'users', user.uid, 'employees', m);
       const empSnap = await getDoc(empRef);
       const stored = empSnap.exists() ? empSnap.data() : null;
@@ -135,6 +127,7 @@ export default function Home() {
         id: m,
         registrationNumber: m,
         expectedMonthlyHours: 160,
+        fixedDsrDays: stored?.fixedDsrDays || [0],
         previousBalance: stored?.previousBalance || '00:00',
         lastFetch: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -163,39 +156,13 @@ export default function Home() {
       });
 
       await batch.commit();
+      await loadEmployeeData(m);
 
-      // ORDEM DECRESCENTE para o estado local
-      const sortedData = freshData.sort((a, b) => {
-        const [dayA, monthA, yearA] = a.date.split('/').map(Number);
-        const [dayB, monthB, yearB] = b.date.split('/').map(Number);
-        const dateA = new Date(yearA, monthA - 1, dayA).getTime();
-        const dateB = new Date(yearB, monthB - 1, dayB).getTime();
-        return dateB - dateA;
-      });
+      if (!stored) setShowBalanceDialog(true);
 
-      setEmployeeData({
-        matricula: m,
-        previousBalance: employeeBase.previousBalance,
-        lastFetch: employeeBase.lastFetch,
-        dailyRecords: sortedData
-      });
-
-      if (!stored) {
-        setShowBalanceDialog(true);
-      }
-
-      toast({
-        title: "Sincronização concluída",
-        description: `${freshData.length} dias importados com sucesso.`
-      });
-
+      toast({ title: "Sincronização concluída", description: "Dados atualizados com sucesso." });
     } catch (error: any) {
-      console.error("Erro na sincronização:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro na consulta",
-        description: error.message || "Falha ao acessar o portal."
-      });
+      toast({ variant: "destructive", title: "Erro na consulta", description: error.message });
     } finally {
       setIsLoading(false);
     }
@@ -203,16 +170,45 @@ export default function Home() {
 
   const handleSaveBalance = async (balance: string) => {
     if (employeeData && matricula && firestore && user) {
-      const formattedBalance = balance.includes(':') ? balance : '00:00';
       try {
         const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
-        await setDoc(docRef, { previousBalance: formattedBalance }, { merge: true });
-        setEmployeeData({ ...employeeData, previousBalance: formattedBalance });
+        await setDoc(docRef, { previousBalance: balance }, { merge: true });
+        setEmployeeData({ ...employeeData, previousBalance: balance });
         setShowBalanceDialog(false);
         toast({ title: "Saldo atualizado" });
-      } catch (e) {
-        toast({ variant: "destructive", title: "Erro ao salvar saldo" });
-      }
+      } catch (e) { toast({ variant: "destructive", title: "Erro ao salvar" }); }
+    }
+  };
+
+  const handleSaveDsr = async (days: number[]) => {
+    if (employeeData && matricula && firestore && user) {
+      try {
+        const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
+        await setDoc(docRef, { fixedDsrDays: days }, { merge: true });
+        setEmployeeData({ ...employeeData, fixedDsrDays: days });
+        setShowDsrDialog(false);
+        toast({ title: "Configuração de DSR salva" });
+      } catch (e) { toast({ variant: "destructive", title: "Erro ao salvar" }); }
+    }
+  };
+
+  const handleManualEdit = async (times: string[]) => {
+    if (editingRecord && matricula && firestore && user) {
+      try {
+        const monthYear = editingRecord.monthlyTimeLogId!;
+        const dayRef = doc(firestore, 'users', user.uid, 'employees', matricula, 'monthlyTimeLogs', monthYear, 'dailyEntries', editingRecord.id);
+        
+        await setDoc(dayRef, { times }, { merge: true });
+        
+        // Atualiza estado local
+        const updatedRecords = employeeData?.dailyRecords.map(r => 
+          r.id === editingRecord.id ? { ...r, times } : r
+        ) || [];
+        
+        setEmployeeData(prev => prev ? { ...prev, dailyRecords: updatedRecords } : null);
+        setEditingRecord(null);
+        toast({ title: "Horários atualizados manualmente" });
+      } catch (e) { toast({ variant: "destructive", title: "Erro ao editar" }); }
     }
   };
 
@@ -230,28 +226,21 @@ export default function Home() {
     }
   };
 
-  if (isUserLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="w-10 h-10 animate-spin text-primary" /></div>;
-  }
+  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
     <main className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-8">
         <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-primary/20 pb-6">
           <div className="space-y-1 text-center md:text-left">
-            <h1 className="text-4xl font-bold text-primary font-headline tracking-tight">
-              Ponto <span className="text-slate-800">Ágil</span>
-            </h1>
-            <p className="text-muted-foreground">Gestão completa do seu banco de horas mensal.</p>
+            <h1 className="text-4xl font-bold text-primary tracking-tight">Ponto <span className="text-slate-800">Ágil</span></h1>
+            <p className="text-muted-foreground">Gestão completa do seu banco de horas.</p>
           </div>
           {matricula && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleClear} disabled={isLoading}>
-                <Trash2 className="w-4 h-4 mr-2" /> Limpar Banco
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }}>
-                <LogOut className="w-4 h-4 mr-2" /> Sair
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)}><Settings className="w-4 h-4 mr-2" /> DSRs</Button>
+              <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleClear}><Trash2 className="w-4 h-4 mr-2" /> Limpar</Button>
+              <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }}><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
             </div>
           )}
         </header>
@@ -259,37 +248,45 @@ export default function Home() {
         {!matricula && !isLoading ? (
           <div className="py-20"><MatriculaInput onSearch={handleSearch} isLoading={isLoading} /></div>
         ) : isLoading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-4 text-center">
+          <div className="py-20 flex flex-col items-center justify-center gap-4">
             <RefreshCcw className="w-12 h-12 text-primary animate-spin" />
-            <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Sincronizando Calendário Mensal...</h2>
-              <p className="text-muted-foreground">Lendo todos os dias do mês. Isso pode levar até 1 minuto.</p>
-            </div>
+            <h2 className="text-xl font-semibold">Sincronizando...</h2>
           </div>
         ) : (
           <div className="space-y-8 animate-in fade-in duration-700">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <h2 className="text-2xl font-semibold">Matrícula <span className="text-primary font-bold">#{matricula}</span></h2>
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button onClick={() => setShowBalanceDialog(true)} variant="outline" size="sm">
-                  <Calendar className="w-4 h-4 mr-2" /> Saldo Anterior
-                </Button>
-                <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm">
-                  <RefreshCcw className="w-4 h-4 mr-2" /> Sincronizar Agora
-                </Button>
+              <h2 className="text-2xl font-semibold">Matrícula <span className="text-primary">#{matricula}</span></h2>
+              <div className="flex gap-2">
+                <Button onClick={() => setShowBalanceDialog(true)} variant="outline" size="sm"><Calendar className="w-4 h-4 mr-2" /> Saldo Anterior</Button>
+                <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm"><RefreshCcw className="w-4 h-4 mr-2" /> Sincronizar</Button>
               </div>
             </div>
 
             <SummaryCards 
               records={employeeData?.dailyRecords || []} 
-              previousBalance={employeeData?.previousBalance || '00:00'} 
+              previousBalance={employeeData?.previousBalance || '00:00'}
+              fixedDsrDays={employeeData?.fixedDsrDays || [0]}
             />
 
-            <DailyRecordsTable records={employeeData?.dailyRecords || []} />
+            <DailyRecordsTable 
+              records={employeeData?.dailyRecords || []} 
+              fixedDsrDays={employeeData?.fixedDsrDays || [0]}
+              onEdit={(record) => setEditingRecord(record)}
+            />
           </div>
         )}
 
         <PreviousBalanceDialog isOpen={showBalanceDialog} onSave={handleSaveBalance} onClose={() => setShowBalanceDialog(false)} />
+        <DsrSettingsDialog isOpen={showDsrDialog} fixedDsrDays={employeeData?.fixedDsrDays || [0]} onSave={handleSaveDsr} onClose={() => setShowDsrDialog(false)} />
+        {editingRecord && (
+          <EditTimesDialog 
+            isOpen={!!editingRecord} 
+            date={editingRecord.date} 
+            initialTimes={editingRecord.times} 
+            onSave={handleManualEdit} 
+            onClose={() => setEditingRecord(null)} 
+          />
+        )}
       </div>
       <Toaster />
     </main>

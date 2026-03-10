@@ -1,10 +1,11 @@
+
 {
   "entities": {
     "Employee": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Employee",
       "type": "object",
-      "description": "Represents an employee whose time records are tracked in the Ponto Ágil application. This entity stores basic employee information necessary for fetching and managing time logs.",
+      "description": "Represents an employee whose time records are tracked in the Ponto Ágil application.",
       "properties": {
         "id": {
           "type": "string",
@@ -12,20 +13,25 @@
         },
         "registrationNumber": {
           "type": "string",
-          "description": "The employee's unique registration number (matricula) used as the key to fetch time data from the external .NET system."
+          "description": "The employee's unique registration number."
         },
         "expectedMonthlyHours": {
           "type": "number",
-          "description": "The standard number of hours an employee is expected to work in a month, used for calculating monthly balance."
+          "description": "Standard monthly hours."
+        },
+        "fixedDsrDays": {
+          "type": "array",
+          "description": "Array of day indices (0-6, where 0 is Sunday) that are fixed DSR/Folga days.",
+          "items": {
+            "type": "number"
+          }
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp when the employee record was first created in the Ponto Ágil system.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp when the employee record was last updated in the Ponto Ágil system.",
           "format": "date-time"
         }
       },
@@ -41,55 +47,23 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "MonthlyTimeLog",
       "type": "object",
-      "description": "Stores the consolidated monthly time tracking data for a specific employee, including fetched raw data, calculated balances, and references to daily entries.",
+      "description": "Stores the consolidated monthly time tracking data.",
       "properties": {
         "id": {
-          "type": "string",
-          "description": "Unique identifier for the MonthlyTimeLog entity."
+          "type": "string"
         },
         "employeeId": {
-          "type": "string",
-          "description": "Reference to the Employee associated with this monthly time log. (Relationship: Employee 1:N MonthlyTimeLog)"
+          "type": "string"
         },
         "year": {
-          "type": "number",
-          "description": "The calendar year for which this time log record is valid."
+          "type": "number"
         },
         "month": {
-          "type": "number",
-          "description": "The calendar month (1-12) for which this time log record is valid."
+          "type": "number"
         },
         "fetchedAt": {
           "type": "string",
-          "description": "Timestamp indicating when the time data for this month was last successfully fetched and processed from the external system.",
           "format": "date-time"
-        },
-        "scrapedRawData": {
-          "type": "string",
-          "description": "A JSON stringified representation of the raw HTML or data scraped directly from the external .NET page. This is used by the AI tool for robust data extraction and adaptation."
-        },
-        "totalHoursWorked": {
-          "type": "number",
-          "description": "The calculated total number of hours worked by the employee during this month, based on extracted daily entries."
-        },
-        "monthlyBalance": {
-          "type": "number",
-          "description": "The balance of hours for this specific month (totalHoursWorked - employee's expectedMonthlyHours). A positive value indicates surplus hours, a negative value indicates a deficit."
-        },
-        "priorMonthCumulativeBalance": {
-          "type": "number",
-          "description": "The cumulative balance of hours carried over from all previous months. This value is either manually entered by the user (for the employee's first record) or automatically derived from the previous month's 'cumulativeBalance'."
-        },
-        "cumulativeBalance": {
-          "type": "number",
-          "description": "The total cumulative balance of hours for the employee up to the end of this month (monthlyBalance + priorMonthCumulativeBalance)."
-        },
-        "dailyEntryIds": {
-          "type": "array",
-          "description": "An array of unique identifiers referencing the DailyEntry entities that constitute this monthly time log. (Relationship: MonthlyTimeLog 1:N DailyEntry)",
-          "items": {
-            "type": "string"
-          }
         }
       },
       "required": [
@@ -97,51 +71,40 @@
         "employeeId",
         "year",
         "month",
-        "fetchedAt",
-        "scrapedRawData",
-        "totalHoursWorked",
-        "monthlyBalance",
-        "priorMonthCumulativeBalance",
-        "cumulativeBalance",
-        "dailyEntryIds"
+        "fetchedAt"
       ]
     },
     "DailyEntry": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "DailyEntry",
       "type": "object",
-      "description": "Represents a single day's time tracking record for an employee, detailing individual shifts and daily totals.",
+      "description": "Represents a single day's time tracking record.",
       "properties": {
         "id": {
-          "type": "string",
-          "description": "Unique identifier for the DailyEntry entity."
+          "type": "string"
         },
         "monthlyTimeLogId": {
-          "type": "string",
-          "description": "Reference to the MonthlyTimeLog entity this daily entry belongs to. (Relationship: MonthlyTimeLog 1:N DailyEntry)"
+          "type": "string"
         },
         "date": {
           "type": "string",
-          "description": "The specific date for which this daily entry record is valid.",
           "format": "date"
         },
-        "shifts": {
+        "times": {
           "type": "array",
-          "description": "An array of individual shift segments for the day, each detailing an entry and exit time.",
           "items": {
             "type": "string"
           }
         },
         "dailyTotalHours": {
-          "type": "number",
-          "description": "The total number of hours worked on this specific day, calculated from the shift segments."
+          "type": "number"
         }
       },
       "required": [
         "id",
         "monthlyTimeLogId",
         "date",
-        "shifts",
+        "times",
         "dailyTotalHours"
       ]
     }
@@ -161,17 +124,7 @@
           "schema": {
             "$ref": "#/backend/entities/Employee"
           },
-          "description": "Stores employee records owned by a specific user. The `userId` in the path defines the owner, and access is restricted to this authenticated `userId`. This path ensures path-based ownership for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the authenticated user who owns this employee record."
-            },
-            {
-              "name": "employeeId",
-              "description": "The unique identifier for the Employee entity."
-            }
-          ]
+          "description": "Stores employee records."
         }
       },
       {
@@ -181,21 +134,7 @@
           "schema": {
             "$ref": "#/backend/entities/MonthlyTimeLog"
           },
-          "description": "Contains monthly time logs for a specific employee, which are owned by a specific user. The `userId` and `employeeId` are implicitly denormalized via the path for robust authorization independence, allowing direct `request.auth.uid` checks without `get()` calls.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the authenticated user who owns this monthly time log."
-            },
-            {
-              "name": "employeeId",
-              "description": "The unique identifier of the parent Employee associated with this log."
-            },
-            {
-              "name": "monthlyTimeLogId",
-              "description": "The unique identifier for the MonthlyTimeLog entity."
-            }
-          ]
+          "description": "Contains monthly time logs."
         }
       },
       {
@@ -205,28 +144,9 @@
           "schema": {
             "$ref": "#/backend/entities/DailyEntry"
           },
-          "description": "Stores daily time entries that constitute a monthly time log for an employee, all owned by a specific user. The `userId`, `employeeId`, and `monthlyTimeLogId` are implicitly denormalized through the path for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the authenticated user who owns this daily entry."
-            },
-            {
-              "name": "employeeId",
-              "description": "The unique identifier of the grandparent Employee associated with this entry."
-            },
-            {
-              "name": "monthlyTimeLogId",
-              "description": "The unique identifier of the parent MonthlyTimeLog associated with this entry."
-            },
-            {
-              "name": "dailyEntryId",
-              "description": "The unique identifier for the DailyEntry entity."
-            }
-          ]
+          "description": "Stores daily time entries."
         }
       }
-    ],
-    "reasoning": "The recommended Firestore structure for Ponto Ágil prioritizes security, scalability, and debuggability by strictly adhering to the core design principles. The central strategy revolves around **Authorization Independence through Path-Based Ownership and Implicit Denormalization**, and **Structural Segregation for Homogeneous Security Posture**.\n\n**Authorization Independence:** All user-specific data is rooted under a top-level `/users/{userId}` collection. For instance, employee records are stored at `/users/{userId}/employees/{employeeId}`, monthly time logs at `/users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}`, and daily entries at `/users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}/dailyEntries/{dailyEntryId}`. This hierarchical path structure means that the `userId` (the owner) is explicitly part of every document's full path within their data space. Firestore security rules can then perform direct, atomic checks like `request.auth.uid == userId` at any level of the hierarchy without requiring inefficient and complex `get()` calls to parent documents. This eliminates hierarchical authorization dependencies, enabling atomic operations (like creating an employee and their first monthly log in a batch) to be secured robustly and simplifies rule debugging considerably.\n\n**QAPs (Rules are not Filters):** The structural segregation achieved by placing all of a user's data under their unique `/users/{userId}` path directly supports Query-as-Permission (QAPs). Each user's data is isolated. When a user requests to list documents (e.g., all employees, or all monthly logs for a specific employee), the query will naturally target their specific `/users/{request.auth.uid}/...` path. The security rules will simply grant `list` permission if `request.auth.uid` matches the `userId` in the path. This ensures that the security rules are the primary mechanism for authorization, explicitly defining what data a user can access, rather than relying on Firestore to filter results *after* a potentially broader, less secure query. The homogeneous security posture within each segment of a user's data (all `employees` for a `userId` have the same owner, all `monthlyTimeLogs` for an `employeeId` have the same implicit owner) makes these simple, efficient, and robust list operations possible.\n\n**Consistency and Predictability:** Wildcards are semantically named (`userId`, `employeeId`, `monthlyTimeLogId`, `dailyEntryId`) for clarity. All documents within a given collection maintain a consistent schema and security requirements. No custom claims or complex role management beyond the implicit user ownership is required based on the current application scope."
+    ]
   }
 }
