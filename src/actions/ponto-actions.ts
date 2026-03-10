@@ -4,8 +4,6 @@
  * Implementa a lógica de navegação ASP.NET AJAX para percorrer todos os dias.
  */
 
-import https from 'https';
-
 /**
  * Extrai campos ocultos do ASP.NET (ViewState, Validation, etc) de HTML ou Delta AJAX.
  */
