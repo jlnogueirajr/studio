@@ -9,6 +9,7 @@ import { DsrSettingsDialog } from '@/components/DsrSettingsDialog';
 import { EditTimesDialog } from '@/components/EditTimesDialog';
 import { CalendarViewDialog } from '@/components/CalendarViewDialog';
 import { AdminPanel } from '@/components/admin/AdminPanel';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { fetchMonthData } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
 import { RefreshCcw, LogOut, Loader2, Calendar, Settings, Wallet, ShieldCheck } from 'lucide-react';
@@ -231,15 +232,18 @@ export default function Home() {
     }
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
+  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
 
   return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-8">
+    <main className="min-h-screen bg-background p-4 md:p-8 transition-colors duration-300">
       <div className="max-w-6xl mx-auto space-y-8">
-        <header className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-          <div className="space-y-1 text-center md:text-left">
-            <h1 className="text-4xl font-black text-primary tracking-tight">Ponto <span className="text-slate-900">Ágil</span></h1>
-            <p className="text-slate-500 font-bold uppercase text-xs tracking-widest">Controle de Jornada</p>
+        <header className="flex flex-col md:flex-row items-center justify-between gap-4 bg-card p-6 rounded-2xl shadow-sm border border-border">
+          <div className="flex items-center gap-4">
+            <div className="space-y-1 text-center md:text-left">
+              <h1 className="text-4xl font-black text-primary tracking-tight">Ponto <span className="text-foreground">Ágil</span></h1>
+              <p className="text-muted-foreground font-bold uppercase text-xs tracking-widest">Controle de Jornada</p>
+            </div>
+            <ThemeToggle />
           </div>
           {matricula && (
             <div className="flex flex-wrap items-center justify-center gap-2">
@@ -250,9 +254,9 @@ export default function Home() {
               )}
               {!showAdminPanel && (
                 <>
-                  <Button variant="outline" size="sm" onClick={() => setShowBalanceDialog(true)} className="bg-white border-primary/30 font-black"><Wallet className="w-4 h-4 mr-2" /> SALDO</Button>
-                  <Button variant="outline" size="sm" onClick={() => setShowCalendarDialog(true)} className="bg-white border-primary/30 font-black"><Calendar className="w-4 h-4 mr-2" /> CALENDÁRIO</Button>
-                  <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-white border-primary/30 font-black"><Settings className="w-4 h-4 mr-2" /> ESCALA</Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowBalanceDialog(true)} className="bg-card border-primary/30 font-black"><Wallet className="w-4 h-4 mr-2" /> SALDO</Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowCalendarDialog(true)} className="bg-card border-primary/30 font-black"><Calendar className="w-4 h-4 mr-2" /> CALENDÁRIO</Button>
+                  <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-card border-primary/30 font-black"><Settings className="w-4 h-4 mr-2" /> ESCALA</Button>
                 </>
               )}
               <Button variant="ghost" size="sm" onClick={handleLogout} className="font-bold text-destructive hover:bg-destructive/10"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
@@ -269,7 +273,7 @@ export default function Home() {
         ) : isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
             <RefreshCcw className="w-16 h-16 text-primary animate-spin" />
-            <h2 className="text-2xl font-black text-slate-800 uppercase animate-pulse">Consultando Portal...</h2>
+            <h2 className="text-2xl font-black text-foreground uppercase animate-pulse">Consultando Portal...</h2>
           </div>
         ) : (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -278,7 +282,7 @@ export default function Home() {
                 <div className="bg-primary/10 p-2 rounded-lg">
                   <ShieldCheck className="text-primary w-6 h-6" />
                 </div>
-                <h2 className="text-2xl font-black text-slate-800">MATRÍCULA <span className="text-primary tracking-widest">#{matricula}</span></h2>
+                <h2 className="text-2xl font-black text-foreground">MATRÍCULA <span className="text-primary tracking-widest">#{matricula}</span></h2>
               </div>
               <Button onClick={handleSyncPortal} variant="default" size="lg" className="shadow-xl font-black bg-primary px-8 transform transition hover:scale-105 active:scale-95">
                 <RefreshCcw className="w-5 h-5 mr-3" /> ATUALIZAR DADOS

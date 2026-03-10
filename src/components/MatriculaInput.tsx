@@ -62,7 +62,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
   };
 
   return (
-    <Card className="w-full max-w-md mx-auto shadow-2xl border-primary/20 bg-white">
+    <Card className="w-full max-w-md mx-auto shadow-2xl border-border bg-card">
       <CardHeader>
         <div className="mx-auto bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
           {step === 'matricula' ? (
@@ -73,7 +73,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
             <Key className="w-8 h-8 text-primary" />
           )}
         </div>
-        <CardTitle className="text-2xl font-black text-center text-slate-800 uppercase">
+        <CardTitle className="text-2xl font-black text-center text-foreground uppercase">
           {step === 'matricula' ? 'Acessar Ponto' : isNewUser ? 'Definir Acesso' : 'Entrar no Sistema'}
         </CardTitle>
         <CardDescription className="text-center font-bold">
@@ -94,7 +94,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 value={matricula}
                 onChange={(e) => setMatricula(e.target.value)}
                 disabled={checkingMatricula || isLoading}
-                className="text-center text-2xl h-14 font-black tracking-widest focus-visible:ring-primary border-slate-300"
+                className="text-center text-2xl h-14 font-black tracking-widest focus-visible:ring-primary border-border bg-background"
                 autoFocus
               />
             </div>
@@ -116,7 +116,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
-                  className="text-center text-lg h-12 font-bold focus-visible:ring-primary border-slate-300"
+                  className="text-center text-lg h-12 font-bold focus-visible:ring-primary border-border bg-background"
                   autoFocus
                 />
               </div>
@@ -128,7 +128,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     disabled={isLoading}
-                    className="text-center text-lg h-12 font-bold focus-visible:ring-primary border-slate-300"
+                    className="text-center text-lg h-12 font-bold focus-visible:ring-primary border-border bg-background"
                   />
                 </div>
               )}
@@ -146,7 +146,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 type="button" 
                 variant="ghost" 
                 onClick={() => setStep('matricula')}
-                className="font-bold text-slate-500"
+                className="font-bold text-muted-foreground"
               >
                 Voltar
               </Button>

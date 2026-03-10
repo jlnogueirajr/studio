@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, User, RotateCcw, Search, Clock, Mail } from 'lucide-react';
+import { Loader2, User, RotateCcw, Search, Clock } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { minutesToTime, timeToMinutes, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
 
@@ -80,9 +80,6 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
       const data = docSnap.data();
       const newVersion = (data?.authVersion || 0) + 1;
       
-      // Implementação de "Reset" via versionamento:
-      // Incrementamos a versão para que o próximo cadastro use um e-mail diferente
-      // E removemos o UID para que o sistema trate como "Primeiro Acesso"
       await updateDoc(docRef, {
         authVersion: newVersion,
         uid: deleteField(),
@@ -100,30 +97,29 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
   };
 
   const filteredUsers = users.filter(u => 
-    u.registrationNumber.includes(search) || 
-    (u.email && u.email.toLowerCase().includes(search.toLowerCase()))
+    u.registrationNumber.includes(search)
   );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <Card className="border-primary/20 shadow-xl overflow-hidden bg-white">
-        <CardHeader className="bg-slate-50 border-b">
+      <Card className="border-border shadow-xl overflow-hidden bg-card">
+        <CardHeader className="bg-muted/50 border-b">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-2xl font-black text-slate-800 flex items-center gap-2">
+              <CardTitle className="text-2xl font-black text-foreground flex items-center gap-2">
                 <User className="text-primary" /> PAINEL DE CONTROLE ADM
               </CardTitle>
-              <CardDescription className="font-bold text-slate-500">
+              <CardDescription className="font-bold text-muted-foreground">
                 Gerencie acessos e resete senhas para novos cadastros.
               </CardDescription>
             </div>
             <div className="relative w-full md:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input 
                 placeholder="Buscar por matrícula..." 
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-10 font-bold border-slate-300 focus-visible:ring-primary"
+                className="pl-10 font-bold border-border bg-background focus-visible:ring-primary"
               />
             </div>
           </div>
@@ -134,26 +130,26 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow className="bg-slate-100 hover:bg-slate-100">
-                  <TableHead className="font-black text-slate-900 uppercase text-xs">Matrícula</TableHead>
-                  <TableHead className="font-black text-slate-900 uppercase text-xs">Acesso</TableHead>
-                  <TableHead className="font-black text-slate-900 uppercase text-xs text-right">Saldo Geral</TableHead>
-                  <TableHead className="font-black text-slate-900 uppercase text-xs text-center w-40">Ações</TableHead>
+                <TableRow className="bg-muted hover:bg-muted">
+                  <TableHead className="font-black text-foreground uppercase text-xs">Matrícula</TableHead>
+                  <TableHead className="font-black text-foreground uppercase text-xs">Acesso</TableHead>
+                  <TableHead className="font-black text-foreground uppercase text-xs text-right">Saldo Geral</TableHead>
+                  <TableHead className="font-black text-foreground uppercase text-xs text-center w-40">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsers.length > 0 ? (
                   filteredUsers.map((u) => (
-                    <TableRow key={u.id} className="hover:bg-slate-50 border-slate-100">
-                      <TableCell className="font-black text-slate-900 text-lg tracking-widest">{u.registrationNumber}</TableCell>
-                      <TableCell className="text-slate-500 font-bold">
+                    <TableRow key={u.id} className="hover:bg-accent/30 border-border">
+                      <TableCell className="font-black text-foreground text-lg tracking-widest">{u.registrationNumber}</TableCell>
+                      <TableCell className="text-muted-foreground font-bold">
                         <div className="flex flex-col">
                           <span className="text-xs">{u.uid ? 'Cadastrado' : 'Aguardando Reset'}</span>
                           <span className="text-[10px] opacity-70">v{u.authVersion || 0}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={`px-3 py-1 rounded-full font-black text-sm ${u.totalBalance.startsWith('-') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                        <span className={`px-3 py-1 rounded-full font-black text-sm ${u.totalBalance.startsWith('-') ? 'bg-red-900/20 text-red-500' : 'bg-green-900/20 text-green-500'}`}>
                           <Clock className="w-3 h-3 inline mr-1" /> {u.totalBalance}
                         </span>
                       </TableCell>
@@ -171,7 +167,7 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-32 text-center text-slate-400 font-black uppercase text-xs">
+                    <TableCell colSpan={4} className="h-32 text-center text-muted-foreground font-black uppercase text-xs">
                       Nenhum usuário localizado.
                     </TableCell>
                   </TableRow>

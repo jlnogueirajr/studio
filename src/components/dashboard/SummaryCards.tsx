@@ -87,29 +87,29 @@ export function SummaryCards({
 
   return (
     <div className="grid gap-4 md:grid-cols-4">
-      <Card className="border-l-4 border-l-primary shadow-sm bg-white">
+      <Card className="border-l-4 border-l-primary shadow-sm bg-card">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">Trabalhado Mês</CardTitle>
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Trabalhado Mês</CardTitle>
           <Clock className="h-4 w-4 text-primary" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-black text-slate-900">{stats.monthTotal}</div>
+          <div className="text-2xl font-black text-foreground">{stats.monthTotal}</div>
           <p className="text-[10px] text-muted-foreground font-bold uppercase">Tempo Efetivo (Inc. Noturna)</p>
         </CardContent>
       </Card>
 
       <Card 
         onClick={onBalanceClick}
-        className="border-l-4 border-l-amber-600 shadow-sm bg-white cursor-pointer hover:bg-slate-50 transition-colors"
+        className="border-l-4 border-l-amber-600 shadow-sm bg-card cursor-pointer hover:bg-accent transition-colors"
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">Saldo de Folgas</CardTitle>
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Saldo de Folgas</CardTitle>
           <Landmark className="h-4 w-4 text-amber-600" />
         </CardHeader>
         <CardContent>
           <div className={cn(
             "text-2xl font-black",
-            stats.holidayBalance >= 0 ? "text-slate-900" : "text-destructive"
+            stats.holidayBalance >= 0 ? "text-foreground" : "text-destructive"
           )}>
             {stats.holidayBalance} dias
           </div>
@@ -117,13 +117,13 @@ export function SummaryCards({
         </CardContent>
       </Card>
 
-      <Card className="border-l-4 border-l-slate-400 shadow-sm bg-white">
+      <Card className="border-l-4 border-l-slate-400 shadow-sm bg-card">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">Meta Diária</CardTitle>
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Meta Diária</CardTitle>
           <Coffee className="h-4 w-4 text-slate-500" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-black text-slate-900">{minutesToTime(dailyWorkload)}</div>
+          <div className="text-2xl font-black text-foreground">{minutesToTime(dailyWorkload)}</div>
           <p className="text-[10px] text-muted-foreground font-bold uppercase">Base de Cálculo</p>
         </CardContent>
       </Card>
@@ -131,12 +131,12 @@ export function SummaryCards({
       <Card 
         onClick={onBalanceClick}
         className={cn(
-          "border-l-4 shadow-sm bg-white cursor-pointer hover:bg-slate-50 transition-colors",
+          "border-l-4 shadow-sm bg-card cursor-pointer hover:bg-accent transition-colors",
           stats.isPositive ? 'border-l-green-600' : 'border-l-destructive'
         )}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">Banco Total</CardTitle>
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Banco Total</CardTitle>
           <TrendingUp className={cn("h-4 w-4", stats.isPositive ? 'text-green-600' : 'text-destructive')} />
         </CardHeader>
         <CardContent>

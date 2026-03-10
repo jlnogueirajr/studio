@@ -35,9 +35,9 @@ export function DailyRecordsTable({
   onEdit 
 }: DailyRecordsTableProps) {
   return (
-    <Card className="shadow-2xl border-primary/10 overflow-hidden bg-white">
-      <CardHeader className="bg-slate-50 border-b border-primary/10 py-4">
-        <CardTitle className="text-lg flex items-center justify-between font-black text-slate-800">
+    <Card className="shadow-2xl border-border overflow-hidden bg-card">
+      <CardHeader className="bg-muted/50 border-b border-border py-4">
+        <CardTitle className="text-lg flex items-center justify-between font-black text-foreground">
           <div className="flex items-center gap-2">
             <span>HISTÓRICO DE JORNADA</span>
             <TooltipProvider>
@@ -56,7 +56,7 @@ export function DailyRecordsTable({
               </Tooltip>
             </TooltipProvider>
           </div>
-          <span className="text-[10px] font-black text-primary bg-primary/5 px-3 py-1 rounded-full border border-primary/20">
+          <span className="text-[10px] font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
             {records.length} REGISTROS
           </span>
         </CardTitle>
@@ -64,11 +64,11 @@ export function DailyRecordsTable({
       <CardContent className="p-0">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-100/80 hover:bg-slate-100/80">
-              <TableHead className="w-[140px] font-black text-slate-900 uppercase text-[11px] border-r">Data / Dia</TableHead>
-              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Tratamento / Batidas</TableHead>
-              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Trabalhado</TableHead>
-              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px] border-l">Saldo Dia</TableHead>
+            <TableRow className="bg-muted/30 hover:bg-muted/30">
+              <TableHead className="w-[140px] font-black text-foreground uppercase text-[11px] border-r">Data / Dia</TableHead>
+              <TableHead className="font-black text-foreground uppercase text-[11px]">Tratamento / Batidas</TableHead>
+              <TableHead className="text-right font-black text-foreground uppercase text-[11px]">Trabalhado</TableHead>
+              <TableHead className="text-right font-black text-foreground uppercase text-[11px] border-l">Saldo Dia</TableHead>
               <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -115,12 +115,12 @@ export function DailyRecordsTable({
                 const dailyBalance = workedMinutes - goalForDay;
 
                 return (
-                  <TableRow key={record.id} className="group hover:bg-slate-50 transition-colors border-slate-100">
-                    <TableCell className="font-black text-slate-900 border-r py-3">
+                  <TableRow key={record.id} className="group hover:bg-accent/30 transition-colors border-border">
+                    <TableCell className="font-black text-foreground border-r py-3">
                       <div className="text-sm">{record.date}</div>
                       <div className={cn(
                         "text-[9px] font-black p-0.5 rounded inline-block uppercase",
-                        isMetaZeroDay ? "text-green-700 bg-green-50" : "text-primary bg-primary/5"
+                        isMetaZeroDay ? "text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400" : "text-primary bg-primary/10"
                       )}>
                         {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })}
                       </div>
@@ -133,8 +133,8 @@ export function DailyRecordsTable({
                             className={cn(
                               "font-black px-3 py-1 shadow-sm uppercase text-[10px]",
                               isMetaZeroDay 
-                                ? "border-green-600 text-green-700 bg-green-50" 
-                                : "border-red-600 text-red-700 bg-red-50"
+                                ? "border-green-600 text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400" 
+                                : "border-red-600 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400"
                             )}
                           >
                             {record.isHoliday || calendarHoliday ? "Feriado" : 
@@ -150,8 +150,8 @@ export function DailyRecordsTable({
                                 className={cn(
                                   "font-black px-2 shadow-sm",
                                   i % 2 === 0 
-                                    ? "bg-slate-800 text-white" 
-                                    : "bg-white text-primary border-primary border"
+                                    ? "bg-foreground text-background" 
+                                    : "bg-background text-primary border-primary border"
                                 )}
                               >
                                 {time}
@@ -161,7 +161,7 @@ export function DailyRecordsTable({
                                <TooltipProvider>
                                <Tooltip>
                                  <TooltipTrigger>
-                                   <Moon className="w-3 h-3 text-indigo-600" />
+                                   <Moon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                                  </TooltipTrigger>
                                  <TooltipContent>
                                    <p className="text-[10px] font-bold">Adicional Noturno Aplicado</p>
@@ -186,13 +186,15 @@ export function DailyRecordsTable({
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-black text-slate-900 text-base tabular-nums">
+                    <TableCell className="text-right font-black text-foreground text-base tabular-nums">
                       {workedMinutes > 0 ? minutesToTime(workedMinutes) : "---"}
                     </TableCell>
                     <TableCell className="text-right font-black text-base tabular-nums border-l">
                       <span className={cn(
                         "px-2 py-0.5 rounded",
-                        dailyBalance >= 0 ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"
+                        dailyBalance >= 0 
+                          ? "text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400" 
+                          : "text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400"
                       )}>
                         {minutesToTime(dailyBalance, true)}
                       </span>
@@ -202,7 +204,7 @@ export function DailyRecordsTable({
                         variant="ghost" 
                         size="icon" 
                         onClick={() => onEdit(record)} 
-                        className="h-8 w-8 text-slate-400 hover:text-primary rounded-full"
+                        className="h-8 w-8 text-muted-foreground hover:text-primary rounded-full"
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
@@ -212,7 +214,7 @@ export function DailyRecordsTable({
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-slate-400 font-black uppercase text-xs">
+                <TableCell colSpan={5} className="h-32 text-center text-muted-foreground font-black uppercase text-xs">
                   Sincronize com o Portal para ver os dados...
                 </TableCell>
               </TableRow>
