@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo } from 'react';
@@ -16,6 +15,7 @@ interface SummaryCardsProps {
   referenceDsrSunday?: string | null;
   dailyWorkload: number;
   holidays: string[];
+  onBalanceClick?: () => void;
 }
 
 export function SummaryCards({ 
@@ -25,7 +25,8 @@ export function SummaryCards({
   fixedDsrDays, 
   referenceDsrSunday, 
   dailyWorkload,
-  holidays 
+  holidays,
+  onBalanceClick
 }: SummaryCardsProps) {
   const stats = useMemo(() => {
     let totalWorkedMinutes = 0;
@@ -54,13 +55,13 @@ export function SummaryCards({
       
       totalWorkedMinutes += dailyWorked;
 
-      // Lógica: Trabalhar no feriado = Meta NORMAL + 1 crédito de folga
+      // Lógica solicitada: Trabalhar no feriado = Meta NORMAL + 1 crédito de folga
       let goalForDay = 0;
       if (!isMetaZeroDay) {
         goalForDay = dailyWorkload;
       } else if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) {
         goalForDay = dailyWorkload;
-        holidayCredits++;
+        holidayCredits++; // Ganha um crédito de dia
       } else if ((calendarHoliday || record.isHoliday) && dailyWorked === 0) {
         goalForDay = 0;
       } else if (isMetaZeroDay) {
@@ -69,6 +70,7 @@ export function SummaryCards({
 
       totalGoalMinutes += goalForDay;
 
+      // Se marcou como compensação, gastou um crédito
       if (record.isCompensation) holidayUsed++;
     });
 
@@ -98,7 +100,10 @@ export function SummaryCards({
         </CardContent>
       </Card>
 
-      <Card className="border-l-4 border-l-amber-600 shadow-sm bg-white">
+      <Card 
+        onClick={onBalanceClick}
+        className="border-l-4 border-l-amber-600 shadow-sm bg-white cursor-pointer hover:bg-slate-50 transition-colors"
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">Saldo de Folgas</CardTitle>
           <Landmark className="h-4 w-4 text-amber-600" />
@@ -125,10 +130,13 @@ export function SummaryCards({
         </CardContent>
       </Card>
 
-      <Card className={cn(
-        "border-l-4 shadow-sm bg-white",
-        stats.isPositive ? 'border-l-green-600' : 'border-l-destructive'
-      )}>
+      <Card 
+        onClick={onBalanceClick}
+        className={cn(
+          "border-l-4 shadow-sm bg-white cursor-pointer hover:bg-slate-50 transition-colors",
+          stats.isPositive ? 'border-l-green-600' : 'border-l-destructive'
+        )}
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-[11px] font-black text-slate-900 uppercase tracking-tighter">Banco Total</CardTitle>
           <TrendingUp className={cn("h-4 w-4", stats.isPositive ? 'text-green-600' : 'text-destructive')} />

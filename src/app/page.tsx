@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -11,7 +10,7 @@ import { EditTimesDialog } from '@/components/EditTimesDialog';
 import { CalendarViewDialog } from '@/components/CalendarViewDialog';
 import { fetchMonthData } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
-import { Trash2, RefreshCcw, LogOut, Loader2, Calendar, Settings, FileText, Download } from 'lucide-react';
+import { Trash2, RefreshCcw, LogOut, Loader2, Calendar, Settings, FileText, Download, Wallet } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
@@ -174,10 +173,10 @@ export default function Home() {
       `Mês de Referência: ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}\n` +
       `--------------------------------------------------\n` +
       `Carga Horária: ${minutesToTime(employeeData.dailyWorkload)}\n` +
-      `Saldo Anterior: ${employeeData.previousBalance}\n` +
-      `Saldo Feriados Anterior: ${employeeData.previousHolidayBalance} dias\n\n` +
+      `Saldo Anterior Banco: ${employeeData.previousBalance}\n` +
+      `Saldo Anterior Feriados: ${employeeData.previousHolidayBalance} dias\n\n` +
       `OCORRÊNCIAS:\n` +
-      employeeData.dailyRecords.filter(r => r.times.length === 0).map(r => `- ${r.date}: ${r.isManualDsr ? 'DSR' : (r.isHoliday ? 'FERIADO' : (r.isBankOff ? 'FOLGA BANCO' : 'FALTA'))}`).join('\n') +
+      employeeData.dailyRecords.filter(r => r.times.length === 0 || r.isCompensation || r.isHoliday).map(r => `- ${r.date}: ${r.isManualDsr ? 'DSR' : (r.isHoliday ? 'FERIADO' : (r.isBankOff ? 'FOLGA BANCO' : (r.isCompensation ? 'COMPENSAÇÃO FERIADO' : 'FALTA')))}`).join('\n') +
       `\n\nGerado em: ${new Date().toLocaleString()}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -195,14 +194,15 @@ export default function Home() {
         <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-primary/20 pb-6">
           <div className="space-y-1 text-center md:text-left">
             <h1 className="text-4xl font-bold text-primary tracking-tight">Ponto <span className="text-slate-900">Ágil</span></h1>
-            <p className="text-muted-foreground font-bold">Gestão corporativa de horas e escalas.</p>
+            <p className="text-muted-foreground font-black">Gestão corporativa de horas e escalas.</p>
           </div>
           {matricula && (
             <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowBalanceDialog(true)} className="bg-white border-primary/30 font-black"><Wallet className="w-4 h-4 mr-2" /> SALDO INICIAL</Button>
               <Button variant="outline" size="sm" onClick={exportRhReport} className="bg-white border-primary/30 font-black"><FileText className="w-4 h-4 mr-2" /> RH</Button>
               <Button variant="outline" size="sm" onClick={() => setShowCalendarDialog(true)} className="bg-white border-primary/30 font-black"><Calendar className="w-4 h-4 mr-2" /> CALENDÁRIO</Button>
               <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-white border-primary/30 font-black"><Settings className="w-4 h-4 mr-2" /> ESCALA</Button>
-              <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }} className="font-bold"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
+              <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }} className="font-bold text-destructive hover:text-destructive"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
             </div>
           )}
         </header>
@@ -229,6 +229,7 @@ export default function Home() {
               referenceDsrSunday={employeeData?.referenceDsrSunday}
               dailyWorkload={employeeData?.dailyWorkload || 440}
               holidays={employeeData?.holidays || []}
+              onBalanceClick={() => setShowBalanceDialog(true)}
             />
 
             <DailyRecordsTable 
@@ -242,13 +243,17 @@ export default function Home() {
           </div>
         )}
 
-        <PreviousBalanceDialog isOpen={showBalanceDialog} onSave={async (b, hb) => {
-          if (matricula && firestore && user) {
-            await setDoc(doc(firestore, 'users', user.uid, 'employees', matricula), { previousBalance: b, previousHolidayBalance: hb }, { merge: true });
-            setShowBalanceDialog(false);
-            loadEmployeeData(matricula);
-          }
-        }} onClose={() => setShowBalanceDialog(false)} />
+        <PreviousBalanceDialog isOpen={showBalanceDialog} 
+          currentBalance={employeeData?.previousBalance}
+          currentHolidayBalance={employeeData?.previousHolidayBalance}
+          onSave={async (b, hb) => {
+            if (matricula && firestore && user) {
+              await setDoc(doc(firestore, 'users', user.uid, 'employees', matricula), { previousBalance: b, previousHolidayBalance: hb }, { merge: true });
+              setShowBalanceDialog(false);
+              loadEmployeeData(matricula);
+              toast({ title: "Saldos iniciais atualizados" });
+            }
+          }} onClose={() => setShowBalanceDialog(false)} />
         
         <DsrSettingsDialog 
           isOpen={showDsrDialog} 
