@@ -88,21 +88,25 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
         
-        // Determinar o ano base para renderização (se houver dados do portal com ano diferente, priorizar o ano dos dados)
         let displayYear = currentYear;
+        let displayMonth = currentMonth;
+
         if (rawRecords.length > 0) {
           const firstDate = rawRecords[0].date.split('/');
-          if (firstDate.length === 3) displayYear = parseInt(firstDate[2]);
+          if (firstDate.length === 3) {
+            displayMonth = parseInt(firstDate[1]);
+            displayYear = parseInt(firstDate[2]);
+          }
         }
 
-        const daysInMonth = new Date(displayYear, currentMonth, 0).getDate();
-        const lastDayToRender = (currentMonth === (new Date().getMonth() + 1) && displayYear === new Date().getFullYear()) 
+        const daysInMonth = new Date(displayYear, displayMonth, 0).getDate();
+        const lastDayToRender = (displayMonth === (new Date().getMonth() + 1) && displayYear === new Date().getFullYear()) 
           ? new Date().getDate() 
           : daysInMonth;
 
         const fullMonthRecords: DailyRecord[] = [];
         for (let d = 1; d <= lastDayToRender; d++) {
-          const dateStr = `${d.toString().padStart(2, '0')}/${currentMonth.toString().padStart(2, '0')}/${displayYear}`;
+          const dateStr = `${d.toString().padStart(2, '0')}/${displayMonth.toString().padStart(2, '0')}/${displayYear}`;
           const existing = rawRecords.find(r => r.date === dateStr);
           if (existing) {
             fullMonthRecords.push(existing);
@@ -391,10 +395,17 @@ export default function Home() {
             isOpen={!!editingRecord} record={editingRecord}
             onSave={async (times, options) => {
               if (firestore && user) {
-                const now = new Date();
-                const mYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
-                const dayRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', mYear, 'dailyEntries', editingRecord.id);
-                await setDoc(dayRef, { times, ...options }, { merge: true });
+                const [d, m, y] = editingRecord.date.split('/').map(Number);
+                const recordMonthYear = `${y}-${m.toString().padStart(2, '0')}`;
+                const dayId = editingRecord.date.replace(/\//g, '-');
+                const dayRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', recordMonthYear, 'dailyEntries', dayId);
+                
+                await setDoc(dayRef, { 
+                  times, 
+                  date: editingRecord.date,
+                  ...options 
+                }, { merge: true });
+                
                 await loadEmployeeData(matricula);
                 setEditingRecord(null);
                 toast({ title: "Ajuste manual salvo!" });

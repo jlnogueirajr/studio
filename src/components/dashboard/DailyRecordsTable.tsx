@@ -80,40 +80,26 @@ export function DailyRecordsTable({
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
-                // Priorizar ajustes manuais sobre a escala automática
-                const isMetaZeroDay = (calendarDsr || 
-                                    calendarHoliday || 
-                                    record.isManualDsr || 
-                                    record.isHoliday || 
-                                    record.isBankOff || 
-                                    record.isCompensation) && !record.isManualWork;
+                const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
+                const isMetaZeroDay = (isManualFolga || calendarDsr || calendarHoliday || record.isHoliday) && !record.isManualWork;
 
-                const isNoTime = !record.times || record.times.length === 0;
                 const sorted = sortPontoHours(record.times);
                 const workedMinutes = calculateDailyWorkedMinutes(
                   sorted.filter((_, i) => i % 2 === 0),
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                let hasNight = false;
-                const entries = sorted.filter((_, i) => i % 2 === 0);
-                const exits = sorted.filter((_, i) => i % 2 !== 0);
-                for (let i = 0; i < Math.min(entries.length, exits.length); i++) {
-                  const start = timeToMinutes(entries[i]);
-                  let end = timeToMinutes(exits[i]);
-                  if (calculateNightMinutes(start || 0, (end < (start || 0) ? end + 1440 : end)) > 0) hasNight = true;
-                }
-                
-                let goalForDay = 0;
-                if (!isMetaZeroDay) {
+                let goalForDay = dailyWorkload;
+                if (record.isManualWork) {
                   goalForDay = dailyWorkload;
-                } else if ((calendarHoliday || record.isHoliday) && workedMinutes > 0) {
-                  goalForDay = dailyWorkload;
-                } else {
+                } else if (isManualFolga || calendarDsr) {
                   goalForDay = 0;
+                } else if (record.isHoliday || calendarHoliday) {
+                  goalForDay = workedMinutes > 0 ? dailyWorkload : 0;
                 }
 
                 const dailyBalance = workedMinutes - goalForDay;
+                const isNoTime = !record.times || record.times.length === 0;
 
                 return (
                   <TableRow key={record.id} className="group hover:bg-accent/30 transition-colors border-border">
@@ -163,18 +149,6 @@ export function DailyRecordsTable({
                                 {time}
                               </Badge>
                             ))}
-                            {hasNight && (
-                               <TooltipProvider>
-                               <Tooltip>
-                                 <TooltipTrigger>
-                                   <Moon className="w-3 h-3 text-indigo-500" />
-                                 </TooltipTrigger>
-                                 <TooltipContent>
-                                   <p className="text-[10px] font-bold">Adicional Noturno Aplicado</p>
-                                 </TooltipContent>
-                               </Tooltip>
-                             </TooltipProvider>
-                            )}
                             {(record.isHoliday || calendarHoliday) && (
                               <TooltipProvider>
                                 <Tooltip>

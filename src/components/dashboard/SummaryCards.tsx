@@ -40,13 +40,6 @@ export function SummaryCards({
 
       const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
       
-      const isMetaZeroDay = (calendarDsr || 
-                          calendarHoliday || 
-                          record.isManualDsr || 
-                          record.isHoliday || 
-                          record.isBankOff || 
-                          record.isCompensation) && !record.isManualWork;
-
       const sorted = sortPontoHours(record.times);
       const dailyWorked = calculateDailyWorkedMinutes(
         sorted.filter((_, i) => i % 2 === 0),
@@ -55,18 +48,23 @@ export function SummaryCards({
       
       totalWorkedMinutes += dailyWorked;
 
-      let goalForDay = 0;
-      if (!isMetaZeroDay) {
+      let goalForDay = dailyWorkload;
+      const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
+
+      if (record.isManualWork) {
         goalForDay = dailyWorkload;
-      } else if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) {
-        goalForDay = dailyWorkload;
-        holidayCredits++; 
-      } else {
+      } else if (isManualFolga || calendarDsr) {
         goalForDay = 0;
+      } else if (record.isHoliday || calendarHoliday) {
+        if (dailyWorked > 0) {
+          goalForDay = dailyWorkload;
+          holidayCredits++;
+        } else {
+          goalForDay = 0;
+        }
       }
 
       totalGoalMinutes += goalForDay;
-      
       if (record.isCompensation) holidayUsed++;
     });
 
