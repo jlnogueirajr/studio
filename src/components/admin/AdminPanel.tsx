@@ -1,18 +1,21 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useFirestore } from '@/firebase';
-import { collection, getDocs, doc, setDoc, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, updateDoc, query, orderBy, getDoc, deleteField } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, User, Key, Search, Clock, Mail } from 'lucide-react';
+import { Loader2, User, RotateCcw, Search, Clock, Mail } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { minutesToTime, timeToMinutes, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
 
-export function AdminPanel() {
+interface AdminPanelProps {
+  onRefresh?: (refreshFn: () => void) => void;
+}
+
+export function AdminPanel({ onRefresh }: AdminPanelProps) {
   const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -20,6 +23,7 @@ export function AdminPanel() {
 
   useEffect(() => {
     fetchUsers();
+    if (onRefresh) onRefresh(fetchUsers);
   }, [firestore]);
 
   const fetchUsers = async () => {
@@ -34,7 +38,6 @@ export function AdminPanel() {
         const entriesSnap = await getDocs(collection(firestore, 'userProfiles', userDoc.id, 'monthlySummaries', mYear, 'dailyEntries'));
         const records = entriesSnap.docs.map(d => d.data());
         
-        // Calcula saldo simplificado do mês para o resumo
         let monthWorked = 0;
         let monthGoal = 0;
         records.forEach((r: any) => {
@@ -69,12 +72,31 @@ export function AdminPanel() {
     }
   };
 
-  const handleResetPassword = (matricula: string) => {
-    // Como estamos no Client SDK, enviamos uma instrução
-    toast({ 
-      title: `Redefinição para ${matricula}`, 
-      description: "Funcionalidade de troca forçada requer Firebase Admin SDK. Instrua o usuário a usar 'Esqueci minha senha' ou realize o processo manualmente no Console Firebase." 
-    });
+  const handleResetPassword = async (matricula: string) => {
+    if (!firestore) return;
+    try {
+      const docRef = doc(firestore, 'userProfiles', matricula);
+      const docSnap = await getDoc(docRef);
+      const data = docSnap.data();
+      const newVersion = (data?.authVersion || 0) + 1;
+      
+      // Implementação de "Reset" via versionamento:
+      // Incrementamos a versão para que o próximo cadastro use um e-mail diferente
+      // E removemos o UID para que o sistema trate como "Primeiro Acesso"
+      await updateDoc(docRef, {
+        authVersion: newVersion,
+        uid: deleteField(),
+        updatedAt: new Date().toISOString()
+      });
+      
+      toast({ 
+        title: `Acesso de ${matricula} resetado!`, 
+        description: "O colaborador deverá criar uma nova senha no próximo acesso." 
+      });
+      fetchUsers();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Erro ao resetar", description: e.message });
+    }
   };
 
   const filteredUsers = users.filter(u => 
@@ -92,7 +114,7 @@ export function AdminPanel() {
                 <User className="text-primary" /> PAINEL DE CONTROLE ADM
               </CardTitle>
               <CardDescription className="font-bold text-slate-500">
-                Gerencie usuários cadastrados e visualize resumos de banco de horas.
+                Gerencie acessos e resete senhas para novos cadastros.
               </CardDescription>
             </div>
             <div className="relative w-full md:w-72">
@@ -114,7 +136,7 @@ export function AdminPanel() {
               <TableHeader>
                 <TableRow className="bg-slate-100 hover:bg-slate-100">
                   <TableHead className="font-black text-slate-900 uppercase text-xs">Matrícula</TableHead>
-                  <TableHead className="font-black text-slate-900 uppercase text-xs">E-mail de Acesso</TableHead>
+                  <TableHead className="font-black text-slate-900 uppercase text-xs">Acesso</TableHead>
                   <TableHead className="font-black text-slate-900 uppercase text-xs text-right">Saldo Geral</TableHead>
                   <TableHead className="font-black text-slate-900 uppercase text-xs text-center w-40">Ações</TableHead>
                 </TableRow>
@@ -124,8 +146,11 @@ export function AdminPanel() {
                   filteredUsers.map((u) => (
                     <TableRow key={u.id} className="hover:bg-slate-50 border-slate-100">
                       <TableCell className="font-black text-slate-900 text-lg tracking-widest">{u.registrationNumber}</TableCell>
-                      <TableCell className="text-slate-500 font-bold flex items-center gap-2">
-                        <Mail className="w-3 h-3" /> {u.email}
+                      <TableCell className="text-slate-500 font-bold">
+                        <div className="flex flex-col">
+                          <span className="text-xs">{u.uid ? 'Cadastrado' : 'Aguardando Reset'}</span>
+                          <span className="text-[10px] opacity-70">v{u.authVersion || 0}</span>
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <span className={`px-3 py-1 rounded-full font-black text-sm ${u.totalBalance.startsWith('-') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
@@ -137,9 +162,9 @@ export function AdminPanel() {
                           variant="outline" 
                           size="sm" 
                           onClick={() => handleResetPassword(u.registrationNumber)}
-                          className="font-bold text-xs hover:bg-primary/5"
+                          className="font-black text-xs hover:bg-destructive/10 text-destructive border-destructive/20"
                         >
-                          <Key className="w-3 h-3 mr-2" /> Alterar Senha
+                          <RotateCcw className="w-3 h-3 mr-2" /> Zerar Senha
                         </Button>
                       </TableCell>
                     </TableRow>

@@ -14,6 +14,14 @@
           "type": "string",
           "description": "The employee's unique registration number (matrícula) used to access external time clock data."
         },
+        "uid": {
+          "type": "string",
+          "description": "The current Firebase Auth UID linked to this registration number."
+        },
+        "authVersion": {
+          "type": "number",
+          "description": "The version of auth email to allow resetting passwords without Admin SDK."
+        },
         "createdAt": {
           "type": "string",
           "description": "Timestamp when the employee record was first created.",
@@ -140,74 +148,15 @@
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}/employees/{employeeId}",
+        "path": "/userProfiles/{matricula}",
         "definition": {
           "entityName": "Employee",
           "schema": {
             "$ref": "#/backend/entities/Employee"
           },
-          "description": "Stores individual employee records. Each employee record is owned by a specific user, identified by `{userId}` in the path. The `id` field within the document should match `{employeeId}`. Authorization relies on `request.auth.uid` matching `{userId}`. This structure ensures Authorization Independence for Employee data and facilitates secure QAPs.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique Firebase Authentication User ID of the user who owns or manages this employee record."
-            },
-            {
-              "name": "employeeId",
-              "description": "The unique identifier for the specific Employee record, matching the 'id' field within the document."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/employees/{employeeId}/monthlyTimeRecords/{monthlyTimeRecordId}",
-        "definition": {
-          "entityName": "MonthlyTimeRecord",
-          "schema": {
-            "$ref": "#/backend/entities/MonthlyTimeRecord"
-          },
-          "description": "Stores monthly time clock data for a specific employee. Nested under the owning user (`{userId}`) and the specific employee (`{employeeId}`). This structure ensures Authorization Independence, as the owner's UID is part of the path, and supports secure `list` queries. The `id` field within the document should match `{monthlyTimeRecordId}`. Includes denormalized 'employeeId' for easy reference within the document, although it's also present in the path.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique Firebase Authentication User ID of the user who owns the parent employee record."
-            },
-            {
-              "name": "employeeId",
-              "description": "The unique identifier for the parent Employee record."
-            },
-            {
-              "name": "monthlyTimeRecordId",
-              "description": "The unique identifier for the monthly time record, matching the 'id' field within the document."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/employees/{employeeId}/monthlyBalances/{monthlyBalanceId}",
-        "definition": {
-          "entityName": "MonthlyBalance",
-          "schema": {
-            "$ref": "#/backend/entities/MonthlyBalance"
-          },
-          "description": "Stores monthly hour balance data for a specific employee. Nested under the owning user (`{userId}`) and the specific employee (`{employeeId}`). This structure ensures Authorization Independence, as the owner's UID is part of the path, and supports secure `list` queries. The `id` field within the document should match `{monthlyBalanceId}`. Includes denormalized 'employeeId' for easy reference within the document, although it's also present in the path.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique Firebase Authentication User ID of the user who owns the parent employee record."
-            },
-            {
-              "name": "employeeId",
-              "description": "The unique identifier for the parent Employee record."
-            },
-            {
-              "name": "monthlyBalanceId",
-              "description": "The unique identifier for the monthly balance record, matching the 'id' field within the document."
-            }
-          ]
+          "description": "Stores individual employee records. Access is restricted to the owner (matching UID) or admins."
         }
       }
-    ],
-    "reasoning": "The recommended Firestore structure prioritizes Authorization Independence and secure `list` operations (QAPs) by leveraging path-based ownership and structural segregation. All user-specific data is nested under `/users/{userId}/`. This approach ensures that the Firebase `request.auth.uid` can be directly compared against the `{userId}` wildcard in the path for all authorization checks, eliminating the need for `get()` calls in security rules. For example, to access any `Employee` record, `MonthlyTimeRecord`, or `MonthlyBalance`, the authenticated user's ID must match the `{userId}` in the path. This provides atomic access control and simplifies rule logic significantly.\n\nSpecifically, `Employee` documents are stored under `/users/{userId}/employees/{employeeId}`, where `{userId}` denotes the user who owns or manages this employee record. `MonthlyTimeRecord` and `MonthlyBalance` entities, which are conceptually children of an `Employee`, are further nested under their respective `Employee` document: `/users/{userId}/employees/{employeeId}/monthlyTimeRecords/{monthlyTimeRecordId}` and `/users/{userId}/employees/{employeeId}/monthlyBalances/{monthlyBalanceId}`. This hierarchical structure ensures that the `ownerId` (represented by `{userId}`) is implicitly present in the path of all related subcollection documents, thus achieving authorization independence for these nested entities without needing to denormalize the `ownerId` field directly into every document. This also ensures that `list` queries (QAPs) are inherently secure, as a user can only query within their own `/users/{userId}/` subtree, preventing unauthorized data enumeration."
+    ]
   }
 }

@@ -31,15 +31,14 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
     setCheckingMatricula(true);
     try {
       const docRef = doc(firestore, 'userProfiles', cleanMatricula);
-      // O getDoc agora é permitido publicamente nas regras do Firestore para essa coleção
       const docSnap = await getDoc(docRef);
       
-      setIsNewUser(!docSnap.exists());
+      const data = docSnap.data();
+      // Um usuário é considerado "novo" se o documento não existe OU se o UID foi removido (reset de senha)
+      setIsNewUser(!docSnap.exists() || !data?.uid);
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
-      // Fallback: se houver erro de permissão ou rede, tentamos seguir para login
-      // para não travar o usuário
       setIsNewUser(false);
       setStep('password');
     } finally {
@@ -69,13 +68,13 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
           )}
         </div>
         <CardTitle className="text-2xl font-black text-center text-slate-800 uppercase">
-          {step === 'matricula' ? 'Acessar Ponto' : isNewUser ? 'Primeiro Acesso' : 'Entrar no Sistema'}
+          {step === 'matricula' ? 'Acessar Ponto' : isNewUser ? 'Definir Acesso' : 'Entrar no Sistema'}
         </CardTitle>
         <CardDescription className="text-center font-bold">
           {step === 'matricula' 
             ? 'Digite sua matrícula para começar.' 
             : isNewUser 
-              ? 'Crie uma senha para seus próximos acessos.' 
+              ? 'Crie uma nova senha para acessar sua conta.' 
               : `Digite a senha para a matrícula ${matricula}.`}
         </CardDescription>
       </CardHeader>
@@ -134,7 +133,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 disabled={isLoading || !password.trim()} 
                 className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
               >
-                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar e Entrar' : 'Fazer Login'}
+                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar Acesso' : 'Fazer Login'}
               </Button>
               <Button 
                 type="button" 

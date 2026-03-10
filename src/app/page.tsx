@@ -44,6 +44,7 @@ export type EmployeeData = {
   dailyRecords: DailyRecord[];
   isAdmin?: boolean;
   uid?: string;
+  authVersion?: number;
 };
 
 export default function Home() {
@@ -102,7 +103,8 @@ export default function Home() {
           previousHolidayBalance: base.previousHolidayBalance || 0,
           previousBalance: base.previousBalance || '00:00',
           isAdmin: base.isAdmin || false,
-          uid: base.uid
+          uid: base.uid,
+          authVersion: base.authVersion || 0
         } as EmployeeData);
       }
     } catch (e) { 
@@ -116,29 +118,38 @@ export default function Home() {
   const handleAuth = async (m: string, p: string, isSignUp: boolean) => {
     if (!auth || !firestore) return;
     setIsLoading(true);
-    // Usando um domínio mais padrão para evitar bloqueios de provedores
-    const email = `m${m}@pontoagil.com.br`;
 
     try {
+      const docRef = doc(firestore, 'userProfiles', m);
+      const docSnap = await getDoc(docRef);
+      const data = docSnap.data();
+      const version = data?.authVersion || 0;
+      // Usamos um e-mail versionado para permitir resetar a conta sem Admin SDK
+      const email = `m${m}_v${version}@pontoagil.com.br`;
+
       if (isSignUp) {
         const userCredential = await createUserWithEmailAndPassword(auth, email, p);
         const now = new Date().toISOString();
         const isAdmin = m === '000000';
+        
         const profile = {
           id: m,
           registrationNumber: m,
           email: email,
-          uid: userCredential.user.uid, // Guardamos o UID do Firebase para segurança
-          createdAt: now,
+          uid: userCredential.user.uid,
           updatedAt: now,
+          authVersion: version,
           isAdmin: isAdmin,
-          previousBalance: '00:00',
-          previousHolidayBalance: 0,
-          fixedDsrDays: [0],
-          dailyWorkload: 440,
-          holidays: []
+          ...( !docSnap.exists() ? {
+            createdAt: now,
+            previousBalance: '00:00',
+            previousHolidayBalance: 0,
+            fixedDsrDays: [0],
+            dailyWorkload: 440,
+            holidays: []
+          } : {} )
         };
-        await setDoc(doc(firestore, 'userProfiles', m), profile);
+        await setDoc(docRef, profile, { merge: true });
       } else {
         await signInWithEmailAndPassword(auth, email, p);
       }
@@ -155,11 +166,9 @@ export default function Home() {
       } else if (e.code === 'auth/invalid-email') {
         errorMsg = "Formato de matrícula ou e-mail inválido.";
       } else if (e.code === 'auth/email-already-in-use') {
-        errorMsg = "Esta matrícula já possui uma conta cadastrada. Tente fazer login.";
+        errorMsg = "Esta matrícula já possui uma conta. Se você resetou, tente uma nova senha.";
       } else if (e.code === 'auth/weak-password') {
         errorMsg = "A senha deve ter no mínimo 6 caracteres.";
-      } else if (e.code === 'auth/user-not-found') {
-        errorMsg = "Matrícula não cadastrada.";
       }
 
       toast({ 
@@ -255,7 +264,7 @@ export default function Home() {
             <MatriculaInput onLogin={handleAuth} isLoading={isLoading} />
           </div>
         ) : showAdminPanel ? (
-          <AdminPanel />
+          <AdminPanel onRefresh={fetchUsers => fetchUsers()} />
         ) : isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-6">
             <RefreshCcw className="w-16 h-16 text-primary animate-spin" />
