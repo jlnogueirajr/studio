@@ -26,37 +26,40 @@ interface DailyRecordsTableProps {
 
 export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, onEdit }: DailyRecordsTableProps) {
   return (
-    <Card className="shadow-lg border-primary/10 overflow-hidden bg-white">
+    <Card className="shadow-2xl border-primary/10 overflow-hidden bg-white">
       <CardHeader className="bg-slate-50 border-b border-primary/10 py-4">
-        <CardTitle className="text-lg flex items-center justify-between font-bold text-slate-800">
+        <CardTitle className="text-lg flex items-center justify-between font-black text-slate-800">
           <div className="flex items-center gap-2">
-            <span>Detalhamento de Batidas</span>
+            <span>DETALHAMENTO DE BATIDAS</span>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Info className="w-4 h-4 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <p>Meta diária: 07:20 (440m).</p>
-                  <p>DSR: Meta zero.</p>
-                  <p>Saldo = Trabalhado - Meta.</p>
+                <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none">
+                  <p className="font-bold">Regras de Cálculo:</p>
+                  <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px]">
+                    <li>Meta diária: 07:20 (Dia Útil)</li>
+                    <li>Meta DSR: 00:00</li>
+                    <li>Fator Noturno: 1.14x (22h às 05h)</li>
+                  </ul>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <span className="text-xs font-normal text-muted-foreground bg-white px-2 py-1 rounded-full border border-slate-200">
-            {records.length} dias processados
+          <span className="text-[10px] font-black text-primary bg-primary/5 px-3 py-1 rounded-full border border-primary/20">
+            {records.length} REGISTROS CARREGADOS
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-100/50 hover:bg-slate-100/50">
-              <TableHead className="w-[120px] font-black text-slate-900 uppercase text-[11px]">Data</TableHead>
-              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Registros / Status</TableHead>
-              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Horas Úteis</TableHead>
-              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Saldo Dia</TableHead>
+            <TableRow className="bg-slate-100/80 hover:bg-slate-100/80">
+              <TableHead className="w-[140px] font-black text-slate-900 uppercase text-[11px] border-r">Data / Dia</TableHead>
+              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Batidas Registradas</TableHead>
+              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Trabalhado</TableHead>
+              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px] border-l">Saldo Dia</TableHead>
               <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -70,6 +73,7 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                 if (record.isManualDsr) isDsr = true;
                 if (record.isManualWork) isDsr = false;
 
+                const isSunday = dateObj.getDay() === 0;
                 const isNoTime = !record.times || record.times.length === 0;
                 const sorted = sortPontoHours(record.times);
                 const workedMinutes = calculateDailyWorkedMinutes(
@@ -85,10 +89,13 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                 
                 return (
                   <TableRow key={record.id} className="group hover:bg-slate-50 transition-colors border-slate-100">
-                    <TableCell className="font-bold text-slate-900">
+                    <TableCell className="font-black text-slate-900 border-r">
                       <div className="text-sm">{record.date}</div>
-                      <div className="text-[10px] font-black text-primary/70">
-                        {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' }).toUpperCase()}
+                      <div className={cn(
+                        "text-[9px] font-black p-0.5 rounded inline-block uppercase",
+                        isDsr ? "text-green-700 bg-green-50" : "text-primary bg-primary/5"
+                      )}>
+                        {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -96,29 +103,38 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                         {isNoTime ? (
                           <Badge 
                             variant="outline" 
-                            className={isDsr 
-                              ? "border-green-600 text-green-700 bg-green-50 font-bold px-3 py-1" 
-                              : "border-red-600 text-red-700 bg-red-50 font-bold px-3 py-1 animate-pulse"
-                            }
+                            className={cn(
+                              "font-black px-3 py-1 shadow-sm",
+                              isDsr 
+                                ? "border-green-600 text-green-700 bg-green-50" 
+                                : "border-red-600 text-red-700 bg-red-50 animate-pulse"
+                            )}
                           >
-                            {isDsr ? "FOLGA / DSR" : "FALTA / DÉBITO"}
+                            {isDsr ? (isSunday ? "DSR / DOMINGO" : "FOLGA / DSR") : "DÉBITO / FALTA"}
                           </Badge>
                         ) : (
-                          sorted.map((time, i) => (
-                            <Badge 
-                              key={i} 
-                              variant={i % 2 === 0 ? "secondary" : "outline"} 
-                              className={i % 2 === 0 
-                                ? "bg-slate-800 text-white border-slate-800 font-medium px-2" 
-                                : "border-primary text-primary font-black px-2 bg-white"
-                              }
-                            >
-                              {time}
-                            </Badge>
-                          ))
+                          <>
+                            {sorted.map((time, i) => (
+                              <Badge 
+                                key={i} 
+                                variant={i % 2 === 0 ? "secondary" : "outline"} 
+                                className={cn(
+                                  "font-black px-2 shadow-sm transition-transform active:scale-95",
+                                  i % 2 === 0 
+                                    ? "bg-slate-800 text-white border-slate-800" 
+                                    : "border-primary text-primary bg-white"
+                                )}
+                              >
+                                {time}
+                              </Badge>
+                            ))}
+                            {isDsr && (
+                              <Badge className="bg-green-600 text-white border-none text-[9px] font-black uppercase">Extra DSR</Badge>
+                            )}
+                          </>
                         )}
                         {isOdd && (
-                          <Badge variant="destructive" className="animate-pulse py-0 h-5 font-bold uppercase text-[9px]">Batida Ímpar</Badge>
+                          <Badge variant="destructive" className="animate-pulse py-0 h-5 font-black uppercase text-[9px] shadow-sm">Pendente</Badge>
                         )}
                       </div>
                     </TableCell>
@@ -129,8 +145,11 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                         <span>{minutesToTime(workedMinutes)}</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-black text-base tabular-nums">
-                      <span className={dailyBalance >= 0 ? "text-green-600" : "text-destructive"}>
+                    <TableCell className="text-right font-black text-base tabular-nums border-l">
+                      <span className={cn(
+                        "px-2 py-0.5 rounded",
+                        dailyBalance >= 0 ? "text-green-700 bg-green-50" : "text-red-700 bg-red-50"
+                      )}>
                         {minutesToTime(dailyBalance, true)}
                       </span>
                     </TableCell>
@@ -139,7 +158,7 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                         variant="ghost" 
                         size="icon" 
                         onClick={() => onEdit(record)} 
-                        className="h-9 w-9 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all"
+                        className="h-9 w-9 text-slate-400 hover:text-primary hover:bg-primary/10 transition-all rounded-full"
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
@@ -152,7 +171,7 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                 <TableCell colSpan={5} className="h-48 text-center text-muted-foreground font-medium">
                   <div className="flex flex-col items-center gap-2">
                     <Info className="w-8 h-8 text-slate-200" />
-                    <p>Nenhum registro encontrado.</p>
+                    <p className="font-black text-slate-400">NENHUM REGISTRO LOCALIZADO</p>
                   </div>
                 </TableCell>
               </TableRow>
