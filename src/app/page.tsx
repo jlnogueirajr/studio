@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -37,7 +38,6 @@ export default function Home() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
 
-  // Autenticação anônima obrigatória para acesso ao Firestore
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
       signInAnonymously(auth).catch((err) => {
@@ -46,7 +46,6 @@ export default function Home() {
     }
   }, [user, isUserLoading, auth]);
 
-  // Carrega a matrícula salva no localStorage
   useEffect(() => {
     const saved = localStorage.getItem('last_matricula');
     if (saved && user && firestore) {
@@ -69,19 +68,20 @@ export default function Home() {
       if (docSnap.exists()) {
         const base = docSnap.data() as any;
         
-        // Carrega registros diários do mês atual da subcoleção aninhada
         const logsRef = collection(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries');
         const logsSnap = await getDocs(logsRef);
         const records = logsSnap.docs.map(d => d.data() as DailyRecord);
         
+        // Ordenação Ascendente: Do mais antigo para o mais atual
+        const sortedRecords = records.sort((a, b) => {
+           const dateA = a.date.split('/').reverse().join('');
+           const dateB = b.date.split('/').reverse().join('');
+           return dateA.localeCompare(dateB);
+        });
+
         setEmployeeData({
           ...base,
-          dailyRecords: records.sort((a, b) => {
-             // Formato dd/mm/yyyy -> yyyymmdd para sort
-             const dateA = a.date.split('/').reverse().join('');
-             const dateB = b.date.split('/').reverse().join('');
-             return dateB.localeCompare(dateA);
-          })
+          dailyRecords: sortedRecords
         });
       } else {
         setEmployeeData(null);
@@ -118,13 +118,9 @@ export default function Home() {
       const year = now.getFullYear();
       const monthYear = `${year}-${month.toString().padStart(2, '0')}`;
 
-      // 1. Busca dados no portal (Server Action)
       const freshData = await fetchMonthData(m, month, year);
-      
-      // 2. Prepara referências do Firestore conforme Rules
       const batch = writeBatch(firestore);
       
-      // Documento do Empregado
       const empRef = doc(firestore, 'users', user.uid, 'employees', m);
       const empSnap = await getDoc(empRef);
       const stored = empSnap.exists() ? empSnap.data() : null;
@@ -132,7 +128,7 @@ export default function Home() {
       const employeeBase = {
         id: m,
         registrationNumber: m,
-        expectedMonthlyHours: 160, // Padrão
+        expectedMonthlyHours: 160,
         previousBalance: stored?.previousBalance || '00:00',
         lastFetch: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -140,7 +136,6 @@ export default function Home() {
       };
       batch.set(empRef, employeeBase, { merge: true });
 
-      // Documento do Log Mensal
       const logRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear);
       batch.set(logRef, {
         id: monthYear,
@@ -150,7 +145,6 @@ export default function Home() {
         fetchedAt: new Date().toISOString()
       }, { merge: true });
 
-      // Documentos das Entradas Diárias
       freshData.forEach(record => {
         const dayId = record.date.replace(/\//g, '-');
         const dayRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries', dayId);
@@ -158,17 +152,24 @@ export default function Home() {
           ...record,
           id: dayId,
           monthlyTimeLogId: monthYear,
-          dailyTotalHours: 0 // Calculado no front
+          dailyTotalHours: 0
         });
       });
 
       await batch.commit();
 
+      // Ordenação Ascendente para o estado local
+      const sortedData = freshData.sort((a, b) => {
+        const dateA = a.date.split('/').reverse().join('');
+        const dateB = b.date.split('/').reverse().join('');
+        return dateA.localeCompare(dateB);
+      });
+
       setEmployeeData({
         matricula: m,
         previousBalance: employeeBase.previousBalance,
         lastFetch: employeeBase.lastFetch,
-        dailyRecords: freshData
+        dailyRecords: sortedData
       });
 
       if (!stored) {
@@ -195,14 +196,11 @@ export default function Home() {
   const handleSaveBalance = async (balance: string) => {
     if (employeeData && matricula && firestore && user) {
       const formattedBalance = balance.includes(':') ? balance : '00:00';
-      
       try {
         const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
         await setDoc(docRef, { previousBalance: formattedBalance }, { merge: true });
-        
         setEmployeeData({ ...employeeData, previousBalance: formattedBalance });
         setShowBalanceDialog(false);
-        
         toast({ title: "Saldo atualizado" });
       } catch (e) {
         toast({ variant: "destructive", title: "Erro ao salvar saldo" });
@@ -257,7 +255,7 @@ export default function Home() {
             <RefreshCcw className="w-12 h-12 text-primary animate-spin" />
             <div className="space-y-2">
               <h2 className="text-xl font-semibold">Sincronizando Calendário...</h2>
-              <p className="text-muted-foreground">Isso pode levar até 30 segundos dependendo da velocidade do portal.</p>
+              <p className="text-muted-foreground">Extraindo registros dia a dia. Isso pode levar alguns segundos.</p>
             </div>
           </div>
         ) : (
