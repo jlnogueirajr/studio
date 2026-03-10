@@ -55,13 +55,12 @@ export function SummaryCards({
       
       totalWorkedMinutes += dailyWorked;
 
-      // Lógica solicitada: Trabalhar no feriado = Meta NORMAL + 1 crédito de folga
       let goalForDay = 0;
       if (!isMetaZeroDay) {
         goalForDay = dailyWorkload;
       } else if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) {
         goalForDay = dailyWorkload;
-        holidayCredits++; // Ganha um crédito de dia
+        holidayCredits++; 
       } else if ((calendarHoliday || record.isHoliday) && dailyWorked === 0) {
         goalForDay = 0;
       } else if (isMetaZeroDay) {
@@ -70,7 +69,6 @@ export function SummaryCards({
 
       totalGoalMinutes += goalForDay;
 
-      // Se marcou como compensação, gastou um crédito
       if (record.isCompensation) holidayUsed++;
     });
 
@@ -96,7 +94,7 @@ export function SummaryCards({
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-black text-slate-900">{stats.monthTotal}</div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Tempo Efetivo</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Tempo Efetivo (Inc. Noturna)</p>
         </CardContent>
       </Card>
 

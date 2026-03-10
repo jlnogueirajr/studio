@@ -1,8 +1,9 @@
-
 /**
- * Utilitários para cálculo de horas de ponto.
- * Implementa meta diária variável e fator noturno (1.1428x entre 22h e 05h).
+ * Utilitários para cálculos de jornada CLT brasileira.
+ * Implementa meta diária variável, fator noturno (1.1428x entre 22h e 05h) e feriados.
  */
+
+export const FATOR_NOTURNO = 60 / 52.5; // 1.142857...
 
 // Lista de feriados nacionais fixos (YYYY-MM-DD) para 2024 e 2025
 const NATIONAL_HOLIDAYS = [
@@ -31,6 +32,29 @@ export function minutesToTime(totalMinutes: number, showSign = false): string {
 }
 
 /**
+ * Calcula a interseção entre um período trabalhado e a janela noturna (22:00 - 05:00).
+ */
+export function calculateNightMinutes(start: number, end: number): number {
+  const nightStart = 22 * 60; // 1320
+  const nightEnd = 29 * 60;   // 1740 (05:00 do dia seguinte)
+
+  let adjustedEnd = end;
+  if (end < start) adjustedEnd += 1440;
+
+  const intersectionStart = Math.max(start, nightStart);
+  const intersectionEnd = Math.min(adjustedEnd, nightEnd);
+  const nightMinutes = Math.max(0, intersectionEnd - intersectionStart);
+  
+  const earlyNightStart = 0;
+  const earlyNightEnd = 5 * 60; // 300
+  const earlyIntersectionStart = Math.max(start, earlyNightStart);
+  const earlyIntersectionEnd = Math.min(adjustedEnd, earlyNightEnd);
+  const earlyNightMinutes = Math.max(0, earlyIntersectionEnd - earlyIntersectionStart);
+
+  return nightMinutes + earlyNightMinutes;
+}
+
+/**
  * Determina se uma data específica é DSR (Folga) ou Feriado.
  */
 export function isDateDsr(
@@ -42,10 +66,8 @@ export function isDateDsr(
   const dayOfWeek = date.getDay();
   const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
   
-  // Combina feriados nacionais com os cadastrados pelo usuário
   const isHoliday = NATIONAL_HOLIDAYS.includes(dateStr) || holidays.includes(dateStr);
 
-  // Lógica Rotativa de Domingo (1 folga, 2 trabalhos)
   let isSundayDsr = false;
   if (dayOfWeek === 0 && referenceSunday) {
     const refDate = new Date(referenceSunday);
@@ -68,6 +90,7 @@ export function sortPontoHours(hours: string[]): string[] {
   return [...hours].sort((a, b) => {
     const minA = timeToMinutes(a);
     const minB = timeToMinutes(b);
+    // Tratamento para batidas após meia-noite aparecerem depois das da noite anterior
     const isAMad = minA < 300; 
     const isBMad = minB < 300;
     if (isAMad && !isBMad) return 1;
@@ -76,29 +99,25 @@ export function sortPontoHours(hours: string[]): string[] {
   });
 }
 
+/**
+ * Calcula o tempo trabalhado total do dia incluindo Hora Ficta Noturna.
+ */
 export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: string[]): number {
-  let totalWorked = 0;
-  const NIGHT_FACTOR = 60 / 52.5; 
+  let totalMinutes = 0;
+  let nightMinutesRaw = 0;
   const pairsCount = Math.min(entryTimes.length, exitTimes.length);
 
   for (let i = 0; i < pairsCount; i++) {
-    let start = timeToMinutes(entryTimes[i]);
+    const start = timeToMinutes(entryTimes[i]);
     let end = timeToMinutes(exitTimes[i]);
-    if (end < start) end += 24 * 60;
-    const totalDuration = end - start;
-    let nightMinutes = 0;
-    const nightStart = 22 * 60;
-    const nightEnd = 29 * 60; 
-    const intersectionStart = Math.max(start, nightStart);
-    const intersectionEnd = Math.min(end, nightEnd);
-    if (intersectionStart < intersectionEnd) nightMinutes += (intersectionEnd - intersectionStart);
-    const earlyNightEnd = 5 * 60;
-    if (start < earlyNightEnd) {
-        const earlyIntersectionStart = Math.max(start, 0);
-        const earlyIntersectionEnd = Math.min(end, earlyNightEnd);
-        if (earlyIntersectionStart < earlyIntersectionEnd) nightMinutes += (earlyIntersectionEnd - earlyIntersectionStart);
-    }
-    totalWorked += (totalDuration - nightMinutes) + (nightMinutes * NIGHT_FACTOR);
+    
+    // Tratamento de meia-noite
+    const adjustedEnd = end < start ? end + 1440 : end;
+    
+    totalMinutes += (adjustedEnd - start);
+    nightMinutesRaw += calculateNightMinutes(start, adjustedEnd);
   }
-  return totalWorked;
+
+  const nightMinutesFicta = Math.round(nightMinutesRaw * (FATOR_NOTURNO - 1));
+  return totalMinutes + nightMinutesFicta;
 }
