@@ -31,13 +31,15 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
     setCheckingMatricula(true);
     try {
       const docRef = doc(firestore, 'userProfiles', cleanMatricula);
+      // O getDoc agora é permitido publicamente nas regras do Firestore para essa coleção
       const docSnap = await getDoc(docRef);
       
       setIsNewUser(!docSnap.exists());
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
-      // Fallback: se houver erro (ex: offline), assume usuário existente para tentar login
+      // Fallback: se houver erro de permissão ou rede, tentamos seguir para login
+      // para não travar o usuário
       setIsNewUser(false);
       setStep('password');
     } finally {

@@ -43,6 +43,7 @@ export type EmployeeData = {
   holidays: string[];
   dailyRecords: DailyRecord[];
   isAdmin?: boolean;
+  uid?: string;
 };
 
 export default function Home() {
@@ -100,7 +101,8 @@ export default function Home() {
           referenceDsrSunday: base.referenceDsrSunday || null,
           previousHolidayBalance: base.previousHolidayBalance || 0,
           previousBalance: base.previousBalance || '00:00',
-          isAdmin: base.isAdmin || false
+          isAdmin: base.isAdmin || false,
+          uid: base.uid
         } as EmployeeData);
       }
     } catch (e) { 
@@ -114,17 +116,19 @@ export default function Home() {
   const handleAuth = async (m: string, p: string, isSignUp: boolean) => {
     if (!auth || !firestore) return;
     setIsLoading(true);
-    const email = `m${m}@ponto.agil`;
+    // Usando um domínio mais padrão para evitar bloqueios de provedores
+    const email = `m${m}@pontoagil.com.br`;
 
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, p);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, p);
         const now = new Date().toISOString();
         const isAdmin = m === '000000';
         const profile = {
           id: m,
           registrationNumber: m,
           email: email,
+          uid: userCredential.user.uid, // Guardamos o UID do Firebase para segurança
           createdAt: now,
           updatedAt: now,
           isAdmin: isAdmin,
@@ -146,12 +150,16 @@ export default function Home() {
       console.error("Erro Auth:", e);
       let errorMsg = "Tente novamente mais tarde.";
       
-      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-email') {
-        errorMsg = "Senha incorreta ou matrícula não localizada.";
+      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+        errorMsg = "Senha incorreta.";
+      } else if (e.code === 'auth/invalid-email') {
+        errorMsg = "Formato de matrícula ou e-mail inválido.";
       } else if (e.code === 'auth/email-already-in-use') {
         errorMsg = "Esta matrícula já possui uma conta cadastrada. Tente fazer login.";
       } else if (e.code === 'auth/weak-password') {
         errorMsg = "A senha deve ter no mínimo 6 caracteres.";
+      } else if (e.code === 'auth/user-not-found') {
+        errorMsg = "Matrícula não cadastrada.";
       }
 
       toast({ 
