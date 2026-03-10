@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, TrendingUp, CalendarDays, Coffee } from "lucide-react";
 import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
 import { DailyRecord } from '@/app/page';
+import { cn } from '@/lib/utils';
 
 interface SummaryCardsProps {
   records: DailyRecord[];
@@ -53,7 +54,11 @@ export function SummaryCards({
       );
       
       totalWorkedMinutes += dailyWorked;
-      if (!isMetaZero) totalGoalMinutes += dailyWorkload;
+      
+      // A meta só é somada se o dia NÃO for uma folga/DSR/Feriado
+      if (!isMetaZero) {
+        totalGoalMinutes += dailyWorkload;
+      }
     });
 
     const prevBalanceMinutes = timeToMinutes(previousBalance);

@@ -96,6 +96,7 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
+                // Saldo = Trabalhado - Meta (7h20 ou 8h48). Se meta zero, meta = 0.
                 const goalForDay = isMetaZero ? 0 : dailyWorkload;
                 const dailyBalance = workedMinutes - goalForDay;
 
