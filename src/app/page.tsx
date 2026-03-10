@@ -75,17 +75,41 @@ export default function Home() {
     setMatricula(m);
     try {
       const now = new Date();
-      const monthYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const mYear = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
+      
       const docRef = doc(firestore, 'userProfiles', m);
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
         const base = docSnap.data();
-        const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', monthYear, 'dailyEntries');
+        const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', mYear, 'dailyEntries');
         const logsSnap = await getDocs(logsRef);
         const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
         
-        const normalized = normalizeNightShifts(rawRecords);
+        // Preencher lacunas do mês (dias sem batida no portal)
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+        const lastDayToRender = (currentMonth === (new Date().getMonth() + 1) && currentYear === new Date().getFullYear()) 
+          ? new Date().getDate() 
+          : daysInMonth;
+
+        const fullMonthRecords: DailyRecord[] = [];
+        for (let d = 1; d <= lastDayToRender; d++) {
+          const dateStr = `${d.toString().padStart(2, '0')}/${currentMonth.toString().padStart(2, '0')}/${currentYear}`;
+          const existing = rawRecords.find(r => r.date === dateStr);
+          if (existing) {
+            fullMonthRecords.push(existing);
+          } else {
+            fullMonthRecords.push({
+              id: `v-${dateStr.replace(/\//g, '-')}`,
+              date: dateStr,
+              times: []
+            });
+          }
+        }
+
+        const normalized = normalizeNightShifts(fullMonthRecords);
         const sortedRecords = normalized.sort((a, b) => {
            const [dA, mA, yA] = a.date.split('/').map(Number);
            const [dB, mB, yB] = b.date.split('/').map(Number);

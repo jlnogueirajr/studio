@@ -66,9 +66,6 @@ export function SummaryCards({
       }
 
       totalGoalMinutes += goalForDay;
-      if (record.isCompensation || record.isBankOff) {
-         // Se for compensação ou folga banco, não aumenta o saldo de feriados, apenas zera a meta
-      }
       
       if (record.isCompensation) holidayUsed++;
     });
@@ -118,10 +115,10 @@ export function SummaryCards({
         </CardContent>
       </Card>
 
-      <Card className="border-l-4 border-l-slate-400 shadow-sm bg-card transition-colors">
+      <Card className="border-l-4 border-l-muted-foreground/30 shadow-sm bg-card transition-colors">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Meta Diária</CardTitle>
-          <Coffee className="h-4 w-4 text-slate-500" />
+          <Coffee className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-black text-foreground">{minutesToTime(dailyWorkload)}</div>
