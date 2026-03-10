@@ -16,7 +16,7 @@ import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, UserCredential } from 'firebase/auth';
 import { normalizeNightShifts } from '@/lib/ponto-utils';
 
 export type DailyRecord = {
@@ -124,11 +124,22 @@ export default function Home() {
       const docSnap = await getDoc(docRef);
       const data = docSnap.data();
       const version = data?.authVersion || 0;
-      // Usamos um e-mail versionado para permitir resetar a conta sem Admin SDK
       const email = `m${m}_v${version}@pontoagil.com.br`;
 
+      let userCredential: UserCredential;
+
       if (isSignUp) {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, p);
+        try {
+          userCredential = await createUserWithEmailAndPassword(auth, email, p);
+        } catch (e: any) {
+          // Fallback: Se o e-mail já existe (erro de rede anterior ou reset parcial), tenta logar
+          if (e.code === 'auth/email-already-in-use') {
+            userCredential = await signInWithEmailAndPassword(auth, email, p);
+          } else {
+            throw e;
+          }
+        }
+
         const now = new Date().toISOString();
         const isAdmin = m === '000000';
         
@@ -156,7 +167,7 @@ export default function Home() {
       
       localStorage.setItem('logged_matricula', m);
       await loadEmployeeData(m);
-      toast({ title: isSignUp ? "Conta criada com sucesso!" : "Login realizado com sucesso!" });
+      toast({ title: isSignUp ? "Conta configurada com sucesso!" : "Login realizado com sucesso!" });
     } catch (e: any) {
       console.error("Erro Auth:", e);
       let errorMsg = "Tente novamente mais tarde.";
@@ -166,7 +177,7 @@ export default function Home() {
       } else if (e.code === 'auth/invalid-email') {
         errorMsg = "Formato de matrícula ou e-mail inválido.";
       } else if (e.code === 'auth/email-already-in-use') {
-        errorMsg = "Esta matrícula já possui uma conta. Se você resetou, tente uma nova senha.";
+        errorMsg = "Esta matrícula já possui uma conta. Tente logar ou contate o administrador.";
       } else if (e.code === 'auth/weak-password') {
         errorMsg = "A senha deve ter no mínimo 6 caracteres.";
       }

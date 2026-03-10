@@ -39,7 +39,8 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
-      setIsNewUser(false);
+      // Se houver erro de permissão ou rede, assume que pode ser novo para tentar o fluxo
+      setIsNewUser(true);
       setStep('password');
     } finally {
       setCheckingMatricula(false);
