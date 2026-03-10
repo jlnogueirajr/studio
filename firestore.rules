@@ -13,11 +13,16 @@ service cloud.firestore {
       // Permite criação inicial
       allow create: if true;
       
-      // Permite atualizar se for o dono vinculando o UID ou se for o admin 000000
-      allow update: if isSignedIn() && (
-        !('uid' in resource.data) || 
-        resource.data.uid == request.auth.uid || 
-        get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid
+      // Permite reset de senha (limpar UID e aumentar versão) ou atualização pelo dono/admin
+      allow update: if (
+        // Caso 1: Reset de senha (sem estar logado, apenas campos específicos)
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['authVersion', 'uid', 'updatedAt'])) ||
+        // Caso 2: Atualização normal (logado)
+        (isSignedIn() && (
+          !('uid' in resource.data) || 
+          resource.data.uid == request.auth.uid || 
+          get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid
+        ))
       );
       
       allow delete: if isSignedIn() && get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid;

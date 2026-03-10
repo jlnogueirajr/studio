@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2, UserPlus, Key } from 'lucide-react';
+import { Search, Loader2, UserPlus, Key, RotateCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteField, setDoc } from 'firebase/firestore';
+import { toast } from '@/hooks/use-toast';
 
 interface MatriculaInputProps {
   onLogin: (matricula: string, password: string, isSignUp: boolean) => void;
@@ -20,6 +21,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
   const [checkingMatricula, setCheckingMatricula] = useState(false);
+  const [reseting, setReseting] = useState(false);
   
   const firestore = useFirestore();
 
@@ -33,13 +35,15 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
       const docRef = doc(firestore, 'userProfiles', cleanMatricula);
       const docSnap = await getDoc(docRef);
       
-      const data = docSnap.data();
-      // Um usuário é considerado "novo" se o documento não existe OU se o UID foi removido (reset de senha)
-      setIsNewUser(!docSnap.exists() || !data?.uid);
+      if (!docSnap.exists()) {
+        setIsNewUser(true);
+      } else {
+        const data = docSnap.data();
+        setIsNewUser(!data?.uid);
+      }
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
-      // Se houver erro de permissão ou rede, assume que pode ser novo para tentar o fluxo
       setIsNewUser(true);
       setStep('password');
     } finally {
@@ -47,10 +51,48 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
     }
   };
 
+  const handleResetAccess = async () => {
+    if (!firestore || !matricula) return;
+    setReseting(true);
+    try {
+      const cleanMatricula = matricula.trim();
+      const docRef = doc(firestore, 'userProfiles', cleanMatricula);
+      const docSnap = await getDoc(docRef);
+      
+      const currentVersion = docSnap.exists() ? (docSnap.data()?.authVersion || 0) : 0;
+      
+      const updateData = {
+        authVersion: currentVersion + 1,
+        uid: deleteField(),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (docSnap.exists()) {
+        await updateDoc(docRef, updateData);
+      } else {
+        await setDoc(docRef, {
+          registrationNumber: cleanMatricula,
+          id: cleanMatricula,
+          authVersion: 1,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      setIsNewUser(true);
+      setPassword('');
+      setConfirmPassword('');
+      toast({ title: "Acesso resetado!", description: "Agora você pode definir uma nova senha." });
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erro ao resetar", description: "Tente novamente." });
+    } finally {
+      setReseting(false);
+    }
+  };
+
   const handleSubmitLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (isNewUser && password !== confirmPassword) {
-      alert("As senhas não coincidem!");
+      toast({ variant: "destructive", title: "Senhas não coincidem" });
       return;
     }
     onLogin(matricula.trim(), password, isNewUser);
@@ -98,7 +140,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
               disabled={checkingMatricula || isLoading || !matricula.trim()} 
               className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
             >
-              {checkingMatricula ? <Loader2 className="animate-spin" /> : 'Verificar Matrícula'}
+              {checkingMatricula ? <Loader2 className="animate-spin" /> : 'Próximo'}
             </Button>
           </form>
         ) : (
@@ -134,8 +176,23 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 disabled={isLoading || !password.trim()} 
                 className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
               >
-                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar Acesso' : 'Fazer Login'}
+                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar' : 'Entrar'}
               </Button>
+              
+              {!isNewUser && (
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={handleResetAccess}
+                  disabled={reseting || isLoading}
+                  className="text-xs text-slate-400 font-bold hover:text-primary"
+                >
+                  {reseting ? <Loader2 className="animate-spin w-3 h-3 mr-2" /> : <RotateCcw className="w-3 h-3 mr-2" />}
+                  Esqueci minha senha / Resetar
+                </Button>
+              )}
+
               <Button 
                 type="button" 
                 variant="ghost" 
