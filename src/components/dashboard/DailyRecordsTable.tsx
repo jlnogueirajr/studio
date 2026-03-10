@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2, Info, Star } from "lucide-react";
+import { Edit2, Info, Star, Landmark } from "lucide-react";
 import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -49,9 +49,9 @@ export function DailyRecordsTable({
                 <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none shadow-xl">
                   <p className="font-bold text-xs">Regras de Cálculo:</p>
                   <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px] font-medium">
-                    <li>Meta Diária: {minutesToTime(dailyWorkload)}</li>
-                    <li>Meta DSR/Feriado/Folga: 00:00</li>
-                    <li>Saldos em verde são extras, vermelho são débitos.</li>
+                    <li>Trabalho em Feriado: Meta {minutesToTime(dailyWorkload)} + 1 Folga de Crédito.</li>
+                    <li>DSR/Feriado/Folga sem trabalho: Meta 00:00.</li>
+                    <li>Saldos: Verde (Extra), Vermelho (Débito).</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
@@ -81,12 +81,12 @@ export function DailyRecordsTable({
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
-                const isMetaZero = calendarDsr || 
-                                 calendarHoliday || 
-                                 record.isManualDsr || 
-                                 record.isHoliday || 
-                                 record.isBankOff || 
-                                 record.isCompensation;
+                const isMetaZeroDay = calendarDsr || 
+                                    calendarHoliday || 
+                                    record.isManualDsr || 
+                                    record.isHoliday || 
+                                    record.isBankOff || 
+                                    record.isCompensation;
 
                 const isNoTime = !record.times || record.times.length === 0;
                 const sorted = sortPontoHours(record.times);
@@ -95,7 +95,16 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                const goalForDay = isMetaZero ? 0 : dailyWorkload;
+                // Lógica de meta: Feriado trabalhado = Meta Normal
+                let goalForDay = 0;
+                if (!isMetaZeroDay) {
+                  goalForDay = dailyWorkload;
+                } else if ((calendarHoliday || record.isHoliday) && workedMinutes > 0) {
+                  goalForDay = dailyWorkload;
+                } else {
+                  goalForDay = 0;
+                }
+
                 const dailyBalance = workedMinutes - goalForDay;
 
                 return (
@@ -104,7 +113,7 @@ export function DailyRecordsTable({
                       <div className="text-sm">{record.date}</div>
                       <div className={cn(
                         "text-[9px] font-black p-0.5 rounded inline-block uppercase",
-                        isMetaZero ? "text-green-700 bg-green-50" : "text-primary bg-primary/5"
+                        isMetaZeroDay ? "text-green-700 bg-green-50" : "text-primary bg-primary/5"
                       )}>
                         {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })}
                       </div>
@@ -116,7 +125,7 @@ export function DailyRecordsTable({
                             variant="outline" 
                             className={cn(
                               "font-black px-3 py-1 shadow-sm uppercase text-[10px]",
-                              isMetaZero 
+                              isMetaZeroDay 
                                 ? "border-green-600 text-green-700 bg-green-50" 
                                 : "border-red-600 text-red-700 bg-red-50"
                             )}
@@ -124,7 +133,7 @@ export function DailyRecordsTable({
                             {record.isHoliday || calendarHoliday ? "Feriado" : 
                              record.isBankOff ? "Folga Banco" : 
                              record.isCompensation ? "Compensação Feriado" : 
-                             isMetaZero ? "DSR / Folga" : "Falta / Débito"}
+                             isMetaZeroDay ? "DSR / Folga" : "Falta / Débito"}
                           </Badge>
                         ) : (
                           <>
@@ -141,7 +150,18 @@ export function DailyRecordsTable({
                                 {time}
                               </Badge>
                             ))}
-                            {(record.isHoliday || calendarHoliday) && <Star className="w-3 h-3 text-amber-500 fill-amber-500" />}
+                            {(record.isHoliday || calendarHoliday) && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-[10px] font-bold">Feriado Trabalhado (+1 Crédito)</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {record.isCompensation && <Landmark className="w-3 h-3 text-amber-600" />}
                           </>
                         )}

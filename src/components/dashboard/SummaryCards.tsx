@@ -37,9 +37,9 @@ export function SummaryCards({
 
     let totalWorkedMinutes = 0;
     let totalGoalMinutes = 0;
-    let dsrCount = 0;
     let holidayCredits = 0;
     let holidayUsed = 0;
+    let dsrCount = 0;
 
     records.forEach(record => {
       const [day, month, year] = record.date.split('/').map(Number);
@@ -47,15 +47,12 @@ export function SummaryCards({
 
       const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
       
-      const isMetaZero = calendarDsr || 
-                       calendarHoliday || 
-                       record.isManualDsr || 
-                       record.isHoliday || 
-                       record.isBankOff || 
-                       record.isCompensation;
-
-      if (isMetaZero) dsrCount++;
-      if (record.isCompensation) holidayUsed++;
+      const isMetaZeroDay = calendarDsr || 
+                          calendarHoliday || 
+                          record.isManualDsr || 
+                          record.isHoliday || 
+                          record.isBankOff || 
+                          record.isCompensation;
 
       const sorted = sortPontoHours(record.times);
       const dailyWorked = calculateDailyWorkedMinutes(
@@ -64,16 +61,28 @@ export function SummaryCards({
       );
       
       totalWorkedMinutes += dailyWorked;
-      
-      // Se trabalhou em feriado, ganha crédito
-      if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) {
+
+      // Lógica solicitada: Se trabalhou no feriado, conta meta NORMAL para o banco
+      // mas ganha +1 crédito de feriado.
+      let goalForDay = 0;
+      if (!isMetaZeroDay) {
+        goalForDay = dailyWorkload;
+      } else if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) {
+        // Trabalhou no feriado: meta normal
+        goalForDay = dailyWorkload;
         holidayCredits++;
+      } else if ((calendarHoliday || record.isHoliday) && dailyWorked === 0) {
+        // Feriado e não trabalhou: meta zero
+        goalForDay = 0;
+      } else if (isMetaZeroDay) {
+        // DSR ou outras folgas: meta zero
+        goalForDay = 0;
+        dsrCount++;
       }
 
-      // A meta só é somada se o dia NÃO for uma folga/DSR/Feriado
-      if (!isMetaZero) {
-        totalGoalMinutes += dailyWorkload;
-      }
+      totalGoalMinutes += goalForDay;
+
+      if (record.isCompensation) holidayUsed++;
     });
 
     const prevBalanceMinutes = timeToMinutes(previousBalance);
@@ -115,7 +124,7 @@ export function SummaryCards({
           )}>
             {stats.holidayBalance} dias
           </div>
-          <p className="text-[10px] text-muted-foreground font-black uppercase">Créditos para folga</p>
+          <p className="text-[10px] text-muted-foreground font-black uppercase">Folgas Disponíveis</p>
         </CardContent>
       </Card>
 

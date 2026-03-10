@@ -92,14 +92,13 @@ export function CalendarViewDialog({
             
             const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(date, fixedDsrDays, referenceDsrSunday, holidays);
             
-            const isMetaZero = calendarDsr || 
-                             calendarHoliday || 
-                             record?.isManualDsr || 
-                             record?.isHoliday || 
-                             record?.isBankOff || 
-                             record?.isCompensation;
+            const isMetaZeroDay = calendarDsr || 
+                                calendarHoliday || 
+                                record?.isManualDsr || 
+                                record?.isHoliday || 
+                                record?.isBankOff || 
+                                record?.isCompensation;
 
-            const goalForDay = isMetaZero ? 0 : dailyWorkload;
             let workedMinutes = 0;
             if (record) {
               const sorted = sortPontoHours(record.times);
@@ -107,6 +106,16 @@ export function CalendarViewDialog({
                 sorted.filter((_, i) => i % 2 === 0),
                 sorted.filter((_, i) => i % 2 !== 0)
               );
+            }
+
+            // Lógica de meta para o calendário:
+            let goalForDay = 0;
+            if (!isMetaZeroDay) {
+              goalForDay = dailyWorkload;
+            } else if ((calendarHoliday || record?.isHoliday) && workedMinutes > 0) {
+              goalForDay = dailyWorkload;
+            } else {
+              goalForDay = 0;
             }
             
             const balance = workedMinutes - goalForDay;
@@ -117,14 +126,14 @@ export function CalendarViewDialog({
                 key={dateStr} 
                 className={cn(
                   "min-h-[110px] p-2 bg-white relative group transition-all border border-transparent hover:border-primary/40",
-                  isMetaZero && "bg-green-50/40",
+                  isMetaZeroDay && "bg-green-50/40",
                   isToday && "ring-2 ring-primary ring-inset z-10"
                 )}
               >
                 <div className="flex justify-between items-start">
                   <span className={cn(
                     "text-xs font-black",
-                    isMetaZero ? "text-green-700" : "text-slate-900",
+                    isMetaZeroDay ? "text-green-700" : "text-slate-900",
                     isToday && "bg-primary text-white px-1.5 rounded-full"
                   )}>
                     {date.getDate()}
@@ -146,15 +155,20 @@ export function CalendarViewDialog({
                       </div>
                     </>
                   ) : (
-                    !isMetaZero && date < new Date() && (
+                    !isMetaZeroDay && date < new Date() && (
                       <div className="text-[9px] font-black bg-red-50 text-red-600 p-0.5 rounded text-center border border-red-100">
                         -{minutesToTime(dailyWorkload)}
                       </div>
                     )
                   )}
-                  {isMetaZero && (
+                  {isMetaZeroDay && !workedMinutes && (
                     <div className="text-[8px] font-black text-green-600/70 text-center mt-1 uppercase">
                       {calendarHoliday ? "Feriado" : "Folga"}
+                    </div>
+                  )}
+                  {isMetaZeroDay && workedMinutes > 0 && (calendarHoliday || record?.isHoliday) && (
+                    <div className="text-[8px] font-black text-amber-600 text-center mt-1 uppercase">
+                      TRABALHADO
                     </div>
                   )}
                 </div>
