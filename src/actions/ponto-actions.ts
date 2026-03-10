@@ -1,44 +1,65 @@
+
 'use server';
 /**
- * Server Action responsável por realizar o scraping do portal da empresa.
- * Implementa a lógica exata do PontoBot para lidar com ASP.NET UpdatePanels.
+ * Server Action que realiza a consulta ao portal da empresa.
+ * Implementa a lógica EXATA do script Python:
+ * 1. Captura de tokens ASP.NET (__VIEWSTATE, etc.)
+ * 2. Simulação de clique no botão Consultar
+ * 3. Extração de horários via Regex (sem depender de API de IA)
  */
 
-import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
 import https from 'https';
 
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
 /**
- * Extrai TODOS os inputs do HTML, incluindo campos ocultos vitais do ASP.NET.
+ * Extrai todos os inputs ocultos vitais para o funcionamento do ASP.NET.
  */
 function extractAllInputs(html: string) {
   const inputs: Record<string, string> = {};
   const inputRegex = /<input\s+[^>]*?name="([^"]+?)"[^>]*?value="([^"]*?)"/gi;
   let match;
   while ((match = inputRegex.exec(html)) !== null) {
-    const name = match[1];
-    const value = match[2];
-    inputs[name] = value;
+    inputs[match[1]] = match[2];
   }
   return inputs;
 }
 
 /**
- * Realiza a consulta no site da empresa simulando o comportamento do PontoBot.
+ * Extrai os horários do HTML usando a lógica do Python (Regex).
  */
-export async function fetchAndExtractPonto(matricula: string): Promise<RobustTimeDataExtractionOutput> {
-  const now = new Date();
-  const month = now.getMonth() + 1;
-  const year = now.getFullYear();
+function extractTimesPythonStyle(html: string): string[] {
+  const times: string[] = [];
+  
+  // 1. Tenta extrair da tabela 'Grid' específica
+  const tableMatch = html.match(/<table[^>]*?id="Grid"[\s\S]*?<\/table>/i);
+  if (tableMatch) {
+    const tableHtml = tableMatch[0];
+    const cellRegex = /<td[^>]*?>\s*([0-2][0-9]:[0-5][0-9])\s*<\/td>/gi;
+    let match;
+    while ((match = cellRegex.exec(tableHtml)) !== null) {
+      times.push(match[1]);
+    }
+  }
 
-  // Agente para ignorar erros de SSL (equivalente ao verify=False do Python)
+  // 2. Fallback: Regex global (mesmo do script Python) caso a tabela mude
+  if (times.length === 0) {
+    const globalRegex = /(?<!\d)([0-1][0-9]|2[0-3]):([0-5][0-9])(?!\d)/g;
+    const matches = html.match(globalRegex);
+    if (matches) return Array.from(new Set(matches));
+  }
+
+  return times;
+}
+
+export async function fetchAndExtractPonto(matricula: string) {
+  // Agente para ignorar erros de SSL (verify=False do Python)
   const agent = new https.Agent({
     rejectUnauthorized: false
   });
 
   try {
-    // 1. GET inicial para capturar cookies e tokens
+    // Passo 1: GET Inicial para pegar os cookies e tokens de estado (__VIEWSTATE)
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: {
@@ -49,15 +70,13 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       cache: 'no-store'
     });
 
-    if (!responseGet.ok) {
-      throw new Error(`Erro de conexão com o portal: ${responseGet.status}`);
-    }
+    if (!responseGet.ok) throw new Error(`Portal indisponível: ${responseGet.status}`);
 
     const htmlGet = await responseGet.text();
     const setCookie = responseGet.headers.get('set-cookie');
     const cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
 
-    // 2. Prepara o POST com os tokens capturados
+    // Passo 2: POST simulando o clique no botão 'Consultar' com a matrícula
     const allInputs = extractAllInputs(htmlGet);
     const body = new URLSearchParams();
     
@@ -65,12 +84,10 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       body.append(key, value);
     });
     
-    // Configura os disparadores específicos do site
     body.set('ScriptManager1', 'UpdatePanel1|btnConsultar');
     body.set('__EVENTTARGET', 'btnConsultar'); 
     body.set('__EVENTARGUMENT', '');
     body.set('txtMatricula', matricula);
-    body.set('btnConsultar', 'Consultar');
 
     const responsePost = await fetch(TARGET_URL, {
       method: 'POST',
@@ -87,26 +104,24 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       cache: 'no-store'
     });
 
-    if (!responsePost.ok) {
-      throw new Error(`Falha ao enviar dados de consulta: ${responsePost.status}`);
-    }
+    if (!responsePost.ok) throw new Error(`Falha no POST: ${responsePost.status}`);
 
     const htmlContent = await responsePost.text();
 
-    if (htmlContent.includes("Matrícula não encontrada") || htmlContent.includes("inválida")) {
-      throw new Error("Matrícula não encontrada no portal da empresa.");
+    if (htmlContent.includes("Matrícula não encontrada")) {
+      throw new Error("Matrícula inválida no portal.");
     }
 
-    // 3. IA processa o HTML resultante
-    return await robustTimeDataExtraction({
-      htmlContent,
+    // Passo 3: Extração via Regex (Lógica Python)
+    const timesFound = extractTimesPythonStyle(htmlContent);
+
+    return {
       matricula,
-      month,
-      year
-    });
+      times: timesFound
+    };
 
   } catch (error: any) {
-    console.error("Scraping/Extraction error:", error);
+    console.error("Erro na consulta:", error);
     throw new Error(error.message || "Erro desconhecido ao processar ponto.");
   }
 }

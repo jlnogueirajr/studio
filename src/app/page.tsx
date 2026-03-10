@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,14 +13,16 @@ import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { RobustTimeDataExtractionOutput } from '@/ai/flows/robust-time-data-extraction-flow';
 import { signInAnonymously } from 'firebase/auth';
 
 export type EmployeeData = {
   matricula: string;
   previousBalance: string; // HH:MM
   lastFetch: string; // ISO Date
-  extractedData: RobustTimeDataExtractionOutput | null;
+  extractedData: {
+    matricula: string;
+    times: string[];
+  } | null;
 };
 
 export default function Home() {
@@ -79,12 +82,19 @@ export default function Home() {
       setEmployeeData(updated);
       await setDoc(docRef, updated, { merge: true });
 
+      if (freshExtracted.times.length === 0) {
+        toast({
+          title: "Atenção",
+          description: "Consulta realizada, mas nenhum horário foi encontrado hoje."
+        });
+      }
+
     } catch (error: any) {
       console.error(error);
       toast({
         variant: "destructive",
         title: "Erro na consulta",
-        description: error.message || "Não foi possível carregar os dados. Verifique a matrícula e tente novamente."
+        description: error.message || "Não foi possível carregar os dados."
       });
     } finally {
       setIsLoading(false);
@@ -119,7 +129,7 @@ export default function Home() {
         setEmployeeData(null);
         toast({
           title: "Dados apagados",
-          description: "Os dados desta matrícula foram removidos do sistema."
+          description: "Os dados desta matrícula foram removidos."
         });
       } catch (error) {
         toast({
@@ -147,7 +157,6 @@ export default function Home() {
     );
   }
 
-  // Mapeia os dados da IA para o formato da tabela
   const records = employeeData?.extractedData?.times ? [{
     date: new Date().toLocaleDateString('pt-BR'),
     times: employeeData.extractedData.times
@@ -189,16 +198,16 @@ export default function Home() {
         </header>
 
         {!matricula && !isLoading ? (
-          <div className="py-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="py-20">
             <MatriculaInput onSearch={handleSearch} isLoading={isLoading} />
           </div>
         ) : isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center gap-4 text-center">
             <RefreshCcw className="w-12 h-12 text-primary animate-spin" />
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Consultando Dados...</h2>
-              <p className="text-muted-foreground animate-pulse">
-                A IA está analisando a página da empresa para extrair seus horários.
+              <h2 className="text-xl font-semibold">Consultando Portal...</h2>
+              <p className="text-muted-foreground">
+                Lendo os dados diretamente do portal da empresa.
               </p>
             </div>
           </div>
