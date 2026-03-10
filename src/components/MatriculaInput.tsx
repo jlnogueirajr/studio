@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2, UserPlus, Key, RotateCcw } from 'lucide-react';
+import { Search, Loader2, UserPlus, Key } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useFirestore } from '@/firebase';
-import { doc, getDoc, updateDoc, deleteField, setDoc } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
 
 interface MatriculaInputProps {
@@ -21,7 +21,6 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isNewUser, setIsNewUser] = useState(false);
   const [checkingMatricula, setCheckingMatricula] = useState(false);
-  const [reseting, setReseting] = useState(false);
   
   const firestore = useFirestore();
 
@@ -39,60 +38,17 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
         setIsNewUser(true);
       } else {
         const data = docSnap.data();
+        // É novo usuário se não houver um UID vinculado (nunca logou ou foi resetado)
         setIsNewUser(!data?.uid);
       }
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
-      setIsNewUser(true);
+      // Fallback em caso de erro: permitir tentativa de login
+      setIsNewUser(false);
       setStep('password');
     } finally {
       setCheckingMatricula(false);
-    }
-  };
-
-  const handleResetAccess = async () => {
-    if (!firestore || !matricula) return;
-    const cleanMatricula = matricula.trim();
-
-    // Bloqueia reset para conta administrador via interface pública
-    if (cleanMatricula === '000000') {
-      toast({ variant: "destructive", title: "Acesso Protegido", description: "A senha do administrador é fixa e não pode ser resetada aqui." });
-      return;
-    }
-
-    setReseting(true);
-    try {
-      const docRef = doc(firestore, 'userProfiles', cleanMatricula);
-      const docSnap = await getDoc(docRef);
-      
-      const currentVersion = docSnap.exists() ? (docSnap.data()?.authVersion || 0) : 0;
-      
-      const updateData = {
-        authVersion: currentVersion + 1,
-        uid: deleteField(),
-        updatedAt: new Date().toISOString()
-      };
-
-      if (docSnap.exists()) {
-        await updateDoc(docRef, updateData);
-      } else {
-        await setDoc(docRef, {
-          registrationNumber: cleanMatricula,
-          id: cleanMatricula,
-          authVersion: 1,
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      setIsNewUser(true);
-      setPassword('');
-      setConfirmPassword('');
-      toast({ title: "Acesso resetado!", description: "Agora você pode definir uma nova senha." });
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erro ao resetar", description: "Tente novamente." });
-    } finally {
-      setReseting(false);
     }
   };
 
@@ -104,8 +60,6 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
     }
     onLogin(matricula.trim(), password, isNewUser);
   };
-
-  const isAdminMatricula = matricula.trim() === '000000';
 
   return (
     <Card className="w-full max-w-md mx-auto shadow-2xl border-primary/20 bg-white">
@@ -188,20 +142,6 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar' : 'Entrar'}
               </Button>
               
-              {!isNewUser && !isAdminMatricula && (
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleResetAccess}
-                  disabled={reseting || isLoading}
-                  className="text-xs text-slate-400 font-bold hover:text-primary"
-                >
-                  {reseting ? <Loader2 className="animate-spin w-3 h-3 mr-2" /> : <RotateCcw className="w-3 h-3 mr-2" />}
-                  Esqueci minha senha / Resetar
-                </Button>
-              )}
-
               <Button 
                 type="button" 
                 variant="ghost" 
