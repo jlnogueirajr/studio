@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -240,15 +239,15 @@ export default function Home() {
     <main className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-8">
         <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-primary/20 pb-6">
-          <div className="space-y-1">
+          <div className="space-y-1 text-center md:text-left">
             <h1 className="text-4xl font-bold text-primary font-headline tracking-tight">
-              Ponto <span className="text-accent">Ágil</span>
+              Ponto <span className="text-slate-800">Ágil</span>
             </h1>
             <p className="text-muted-foreground">Gestão completa do seu banco de horas mensal.</p>
           </div>
           {matricula && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="text-destructive" onClick={handleClear} disabled={isLoading}>
+              <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleClear} disabled={isLoading}>
                 <Trash2 className="w-4 h-4 mr-2" /> Limpar Banco
               </Button>
               <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }}>
@@ -270,13 +269,13 @@ export default function Home() {
           </div>
         ) : (
           <div className="space-y-8 animate-in fade-in duration-700">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-semibold">Matrícula <span className="text-primary">#{matricula}</span></h2>
-              <div className="flex gap-2">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <h2 className="text-2xl font-semibold">Matrícula <span className="text-primary font-bold">#{matricula}</span></h2>
+              <div className="flex flex-wrap justify-center gap-2">
                 <Button onClick={() => setShowBalanceDialog(true)} variant="outline" size="sm">
-                  <Calendar className="w-4 h-4 mr-2" /> Ajustar Saldo Anterior
+                  <Calendar className="w-4 h-4 mr-2" /> Saldo Anterior
                 </Button>
-                <Button onClick={() => handleSearch(matricula!)} variant="secondary" size="sm">
+                <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm">
                   <RefreshCcw className="w-4 h-4 mr-2" /> Sincronizar Agora
                 </Button>
               </div>
