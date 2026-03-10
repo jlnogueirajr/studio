@@ -4,6 +4,14 @@
  * Implementa meta diária variável e fator noturno (1.1428x entre 22h e 05h).
  */
 
+// Lista de feriados nacionais fixos (YYYY-MM-DD) para 2024 e 2025
+const NATIONAL_HOLIDAYS = [
+  '2024-01-01', '2024-03-29', '2024-04-21', '2024-05-01', '2024-05-30', 
+  '2024-09-07', '2024-10-12', '2024-11-02', '2024-11-15', '2024-11-20', '2024-12-25',
+  '2025-01-01', '2025-04-18', '2025-04-21', '2025-05-01', '2025-06-19', 
+  '2025-09-07', '2025-10-12', '2025-11-02', '2025-11-15', '2025-11-20', '2025-12-25'
+];
+
 export function timeToMinutes(time: string): number {
   if (!time || !time.includes(':')) return 0;
   const isNegative = time.startsWith('-');
@@ -34,7 +42,8 @@ export function isDateDsr(
   const dayOfWeek = date.getDay();
   const dateStr = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
   
-  const isHoliday = holidays.includes(dateStr);
+  // Combina feriados nacionais com os cadastrados pelo usuário
+  const isHoliday = NATIONAL_HOLIDAYS.includes(dateStr) || holidays.includes(dateStr);
 
   // Lógica Rotativa de Domingo (1 folga, 2 trabalhos)
   let isSundayDsr = false;

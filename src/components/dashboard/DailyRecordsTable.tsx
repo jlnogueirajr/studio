@@ -40,18 +40,18 @@ export function DailyRecordsTable({
       <CardHeader className="bg-slate-50 border-b border-primary/10 py-4">
         <CardTitle className="text-lg flex items-center justify-between font-black text-slate-800">
           <div className="flex items-center gap-2">
-            <span>DETALHAMENTO DE BATIDAS</span>
+            <span>HISTÓRICO DE JORNADA</span>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Info className="w-4 h-4 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none">
+                <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none shadow-xl">
                   <p className="font-bold text-xs">Regras de Cálculo:</p>
-                  <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px]">
-                    <li>Meta diária configurada: {minutesToTime(dailyWorkload)}</li>
-                    <li>Meta DSR/Feriado: 00:00</li>
-                    <li>Adicional Noturno aplicado automaticamente.</li>
+                  <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px] font-medium">
+                    <li>Meta Diária: {minutesToTime(dailyWorkload)}</li>
+                    <li>Meta DSR/Feriado/Folga: 00:00</li>
+                    <li>Saldos em verde são extras, vermelho são débitos.</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
@@ -67,7 +67,7 @@ export function DailyRecordsTable({
           <TableHeader>
             <TableRow className="bg-slate-100/80 hover:bg-slate-100/80">
               <TableHead className="w-[140px] font-black text-slate-900 uppercase text-[11px] border-r">Data / Dia</TableHead>
-              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Status / Batidas</TableHead>
+              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Tratamento / Batidas</TableHead>
               <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Trabalhado</TableHead>
               <TableHead className="text-right font-black text-slate-900 uppercase text-[11px] border-l">Saldo Dia</TableHead>
               <TableHead className="w-[60px]"></TableHead>
@@ -81,7 +81,6 @@ export function DailyRecordsTable({
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
-                // Determina se o dia é "Meta Zero"
                 const isMetaZero = calendarDsr || 
                                  calendarHoliday || 
                                  record.isManualDsr || 
@@ -96,13 +95,12 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                // Saldo = Trabalhado - Meta (7h20 ou 8h48). Se meta zero, meta = 0.
                 const goalForDay = isMetaZero ? 0 : dailyWorkload;
                 const dailyBalance = workedMinutes - goalForDay;
 
                 return (
                   <TableRow key={record.id} className="group hover:bg-slate-50 transition-colors border-slate-100">
-                    <TableCell className="font-black text-slate-900 border-r">
+                    <TableCell className="font-black text-slate-900 border-r py-3">
                       <div className="text-sm">{record.date}</div>
                       <div className={cn(
                         "text-[9px] font-black p-0.5 rounded inline-block uppercase",
@@ -125,7 +123,7 @@ export function DailyRecordsTable({
                           >
                             {record.isHoliday || calendarHoliday ? "Feriado" : 
                              record.isBankOff ? "Folga Banco" : 
-                             record.isCompensation ? "Compensação" : 
+                             record.isCompensation ? "Compensação Feriado" : 
                              isMetaZero ? "DSR / Folga" : "Falta / Débito"}
                           </Badge>
                         ) : (
@@ -144,10 +142,8 @@ export function DailyRecordsTable({
                               </Badge>
                             ))}
                             {(record.isHoliday || calendarHoliday) && <Star className="w-3 h-3 text-amber-500 fill-amber-500" />}
+                            {record.isCompensation && <Landmark className="w-3 h-3 text-amber-600" />}
                           </>
-                        )}
-                        {sorted.length % 2 !== 0 && !isNoTime && (
-                          <Badge variant="destructive" className="animate-pulse text-[9px] font-black">Incompleto</Badge>
                         )}
                       </div>
                     </TableCell>
@@ -178,7 +174,7 @@ export function DailyRecordsTable({
             ) : (
               <TableRow>
                 <TableCell colSpan={5} className="h-32 text-center text-slate-400 font-black uppercase text-xs">
-                  Aguardando Sincronização...
+                  Sincronize com o Portal para ver os dados...
                 </TableCell>
               </TableRow>
             )}
