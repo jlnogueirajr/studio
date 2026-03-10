@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2, Info } from "lucide-react";
+import { Edit2, Info, Star } from "lucide-react";
 import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -22,10 +22,19 @@ interface DailyRecordsTableProps {
   records: DailyRecord[];
   fixedDsrDays: number[];
   referenceDsrSunday?: string | null;
+  dailyWorkload: number;
+  holidays: string[];
   onEdit: (record: DailyRecord) => void;
 }
 
-export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, onEdit }: DailyRecordsTableProps) {
+export function DailyRecordsTable({ 
+  records, 
+  fixedDsrDays, 
+  referenceDsrSunday, 
+  dailyWorkload,
+  holidays,
+  onEdit 
+}: DailyRecordsTableProps) {
   return (
     <Card className="shadow-2xl border-primary/10 overflow-hidden bg-white">
       <CardHeader className="bg-slate-50 border-b border-primary/10 py-4">
@@ -38,18 +47,18 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                   <Info className="w-4 h-4 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none">
-                  <p className="font-bold">Regras de Cálculo:</p>
+                  <p className="font-bold text-xs">Regras de Cálculo:</p>
                   <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px]">
-                    <li>Meta diária: 07:20 (Dia Útil)</li>
-                    <li>Meta DSR: 00:00</li>
-                    <li>Fator Noturno: 1.14x (22h às 05h)</li>
+                    <li>Meta diária configurada: {minutesToTime(dailyWorkload)}</li>
+                    <li>Meta DSR/Feriado: 00:00</li>
+                    <li>Adicional Noturno aplicado automaticamente.</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
           <span className="text-[10px] font-black text-primary bg-primary/5 px-3 py-1 rounded-full border border-primary/20">
-            {records.length} REGISTROS CARREGADOS
+            {records.length} REGISTROS
           </span>
         </CardTitle>
       </CardHeader>
@@ -58,7 +67,7 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
           <TableHeader>
             <TableRow className="bg-slate-100/80 hover:bg-slate-100/80">
               <TableHead className="w-[140px] font-black text-slate-900 uppercase text-[11px] border-r">Data / Dia</TableHead>
-              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Batidas Registradas</TableHead>
+              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Status / Batidas</TableHead>
               <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Trabalhado</TableHead>
               <TableHead className="text-right font-black text-slate-900 uppercase text-[11px] border-l">Saldo Dia</TableHead>
               <TableHead className="w-[60px]"></TableHead>
@@ -70,11 +79,16 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                 const [day, month, year] = record.date.split('/').map(Number);
                 const dateObj = new Date(year, month - 1, day);
                 
-                let isDsr = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday);
-                if (record.isManualDsr) isDsr = true;
-                if (record.isManualWork) isDsr = false;
+                const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
+                
+                // Determina se o dia é "Meta Zero"
+                const isMetaZero = calendarDsr || 
+                                 calendarHoliday || 
+                                 record.isManualDsr || 
+                                 record.isHoliday || 
+                                 record.isBankOff || 
+                                 record.isCompensation;
 
-                const isSunday = dateObj.getDay() === 0;
                 const isNoTime = !record.times || record.times.length === 0;
                 const sorted = sortPontoHours(record.times);
                 const workedMinutes = calculateDailyWorkedMinutes(
@@ -82,19 +96,16 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                const DAILY_GOAL = 7 * 60 + 20;
-                const goalForDay = isDsr ? 0 : DAILY_GOAL;
+                const goalForDay = isMetaZero ? 0 : dailyWorkload;
                 const dailyBalance = workedMinutes - goalForDay;
 
-                const isOdd = sorted.length % 2 !== 0;
-                
                 return (
                   <TableRow key={record.id} className="group hover:bg-slate-50 transition-colors border-slate-100">
                     <TableCell className="font-black text-slate-900 border-r">
                       <div className="text-sm">{record.date}</div>
                       <div className={cn(
                         "text-[9px] font-black p-0.5 rounded inline-block uppercase",
-                        isDsr ? "text-green-700 bg-green-50" : "text-primary bg-primary/5"
+                        isMetaZero ? "text-green-700 bg-green-50" : "text-primary bg-primary/5"
                       )}>
                         {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })}
                       </div>
@@ -105,46 +116,42 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                           <Badge 
                             variant="outline" 
                             className={cn(
-                              "font-black px-3 py-1 shadow-sm",
-                              isDsr 
+                              "font-black px-3 py-1 shadow-sm uppercase text-[10px]",
+                              isMetaZero 
                                 ? "border-green-600 text-green-700 bg-green-50" 
-                                : "border-red-600 text-red-700 bg-red-50 animate-pulse"
+                                : "border-red-600 text-red-700 bg-red-50"
                             )}
                           >
-                            {isDsr ? (isSunday ? "DSR / DOMINGO" : "FOLGA / DSR") : "DÉBITO / FALTA"}
+                            {record.isHoliday || calendarHoliday ? "Feriado" : 
+                             record.isBankOff ? "Folga Banco" : 
+                             record.isCompensation ? "Compensação" : 
+                             isMetaZero ? "DSR / Folga" : "Falta / Débito"}
                           </Badge>
                         ) : (
                           <>
                             {sorted.map((time, i) => (
                               <Badge 
                                 key={i} 
-                                variant={i % 2 === 0 ? "secondary" : "outline"} 
                                 className={cn(
-                                  "font-black px-2 shadow-sm transition-transform active:scale-95",
+                                  "font-black px-2 shadow-sm",
                                   i % 2 === 0 
-                                    ? "bg-slate-800 text-white border-slate-800" 
-                                    : "border-primary text-primary bg-white"
+                                    ? "bg-slate-800 text-white" 
+                                    : "bg-white text-primary border-primary border"
                                 )}
                               >
                                 {time}
                               </Badge>
                             ))}
-                            {isDsr && (
-                              <Badge className="bg-green-600 text-white border-none text-[9px] font-black uppercase">Extra DSR</Badge>
-                            )}
+                            {(record.isHoliday || calendarHoliday) && <Star className="w-3 h-3 text-amber-500 fill-amber-500" />}
                           </>
                         )}
-                        {isOdd && (
-                          <Badge variant="destructive" className="animate-pulse py-0 h-5 font-black uppercase text-[9px] shadow-sm">Pendente</Badge>
+                        {sorted.length % 2 !== 0 && !isNoTime && (
+                          <Badge variant="destructive" className="animate-pulse text-[9px] font-black">Incompleto</Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-black text-slate-900 text-base tabular-nums">
-                      {isNoTime && isDsr ? (
-                        <span className="text-slate-300">---</span>
-                      ) : (
-                        <span>{minutesToTime(workedMinutes)}</span>
-                      )}
+                      {workedMinutes > 0 ? minutesToTime(workedMinutes) : "---"}
                     </TableCell>
                     <TableCell className="text-right font-black text-base tabular-nums border-l">
                       <span className={cn(
@@ -159,7 +166,7 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
                         variant="ghost" 
                         size="icon" 
                         onClick={() => onEdit(record)} 
-                        className="h-9 w-9 text-slate-400 hover:text-primary hover:bg-primary/10 transition-all rounded-full"
+                        className="h-8 w-8 text-slate-400 hover:text-primary rounded-full"
                       >
                         <Edit2 className="w-4 h-4" />
                       </Button>
@@ -169,11 +176,8 @@ export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, o
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="h-48 text-center text-muted-foreground font-medium">
-                  <div className="flex flex-col items-center gap-2">
-                    <Info className="w-8 h-8 text-slate-200" />
-                    <p className="font-black text-slate-400">NENHUM REGISTRO LOCALIZADO</p>
-                  </div>
+                <TableCell colSpan={5} className="h-32 text-center text-slate-400 font-black uppercase text-xs">
+                  Aguardando Sincronização...
                 </TableCell>
               </TableRow>
             )}
