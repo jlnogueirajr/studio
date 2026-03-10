@@ -1,20 +1,13 @@
-
 'use server';
 /**
- * Server Action que realiza a consulta ao portal da empresa.
- * Implementa a lógica EXATA do script Python:
- * 1. Captura de tokens ASP.NET (__VIEWSTATE, etc.)
- * 2. Simulação de clique no botão Consultar
- * 3. Extração de horários via Regex (sem depender de API de IA)
+ * Server Action que realiza a consulta COMPLETA do mês no portal.
+ * Implementa a lógica de navegação em calendário do script Python.
  */
 
 import https from 'https';
 
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
-/**
- * Extrai todos os inputs ocultos vitais para o funcionamento do ASP.NET.
- */
 function extractAllInputs(html: string) {
   const inputs: Record<string, string> = {};
   const inputRegex = /<input\s+[^>]*?name="([^"]+?)"[^>]*?value="([^"]*?)"/gi;
@@ -25,13 +18,8 @@ function extractAllInputs(html: string) {
   return inputs;
 }
 
-/**
- * Extrai os horários do HTML usando a lógica do Python (Regex).
- */
-function extractTimesPythonStyle(html: string): string[] {
+function extractTimes(html: string): string[] {
   const times: string[] = [];
-  
-  // 1. Tenta extrair da tabela 'Grid' específica
   const tableMatch = html.match(/<table[^>]*?id="Grid"[\s\S]*?<\/table>/i);
   if (tableMatch) {
     const tableHtml = tableMatch[0];
@@ -41,87 +29,115 @@ function extractTimesPythonStyle(html: string): string[] {
       times.push(match[1]);
     }
   }
-
-  // 2. Fallback: Regex global (mesmo do script Python) caso a tabela mude
-  if (times.length === 0) {
-    const globalRegex = /(?<!\d)([0-1][0-9]|2[0-3]):([0-5][0-9])(?!\d)/g;
-    const matches = html.match(globalRegex);
-    if (matches) return Array.from(new Set(matches));
-  }
-
-  return times;
+  return Array.from(new Set(times));
 }
 
-export async function fetchAndExtractPonto(matricula: string) {
-  // Agente para ignorar erros de SSL (verify=False do Python)
-  const agent = new https.Agent({
-    rejectUnauthorized: false
-  });
+/**
+ * Extrai o mapeamento de dias do calendário HTML.
+ * Busca links do tipo javascript:__doPostBack('Calendar','XXXX')
+ */
+function extractCalendarMap(html: string, targetMonth: number): Record<number, string> {
+  const map: Record<number, string> = {};
+  // Mapeia links do calendário: title="9 de março" -> '9564'
+  const linkRegex = /href="javascript:__doPostBack\('Calendar','(\w+)'\)"[^>]*?title="(\d+)\s+de\s+([^"]+)"/gi;
+  let match;
+  const monthNames = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  const targetMonthName = monthNames[targetMonth - 1];
+
+  while ((match = linkRegex.exec(html)) !== null) {
+    const arg = match[1];
+    const day = parseInt(match[2]);
+    const month = match[3].toLowerCase();
+    
+    if (month.includes(targetMonthName)) {
+      map[day] = arg;
+    }
+  }
+  return map;
+}
+
+export async function fetchMonthData(matricula: string, month: number, year: number) {
+  const agent = new https.Agent({ rejectUnauthorized: false });
+  const results: { date: string, times: string[] }[] = [];
 
   try {
-    // Passo 1: GET Inicial para pegar os cookies e tokens de estado (__VIEWSTATE)
+    // 1. GET Inicial
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
+      headers: { 'User-Agent': 'Mozilla/5.0' },
       // @ts-ignore
-      agent,
-      cache: 'no-store'
+      agent
     });
+    let html = await responseGet.text();
+    let setCookie = responseGet.headers.get('set-cookie');
+    let cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
 
-    if (!responseGet.ok) throw new Error(`Portal indisponível: ${responseGet.status}`);
+    // 2. Mapeia o calendário
+    const calendarMap = extractCalendarMap(html, month);
+    const daysToFetch = Object.keys(calendarMap).map(Number).sort((a, b) => a - b);
 
-    const htmlGet = await responseGet.text();
-    const setCookie = responseGet.headers.get('set-cookie');
-    const cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
+    // 3. Itera sobre os dias do mês até hoje
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() + 1 === month && today.getFullYear() === year;
+    const lastDayToFetch = isCurrentMonth ? today.getDate() : 31;
 
-    // Passo 2: POST simulando o clique no botão 'Consultar' com a matrícula
-    const allInputs = extractAllInputs(htmlGet);
-    const body = new URLSearchParams();
-    
-    Object.entries(allInputs).forEach(([key, value]) => {
-      body.append(key, value);
-    });
-    
-    body.set('ScriptManager1', 'UpdatePanel1|btnConsultar');
-    body.set('__EVENTTARGET', 'btnConsultar'); 
-    body.set('__EVENTARGUMENT', '');
-    body.set('txtMatricula', matricula);
+    for (const day of daysToFetch) {
+      if (day > lastDayToFetch) break;
 
-    const responsePost = await fetch(TARGET_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': TARGET_URL,
-        'Origin': 'https://webapp.confianca.com.br',
-        ...(cookies ? { 'Cookie': cookies } : {})
-      },
-      // @ts-ignore
-      agent,
-      body: body.toString(),
-      cache: 'no-store'
-    });
+      const dayArg = calendarMap[day];
+      const allInputs = extractAllInputs(html);
+      const body = new URLSearchParams();
+      Object.entries(allInputs).forEach(([k, v]) => body.append(k, v));
+      
+      // Simula clique no dia do calendário
+      body.set('ScriptManager1', 'UpdatePanel1|Calendar');
+      body.set('__EVENTTARGET', 'Calendar');
+      body.set('__EVENTARGUMENT', dayArg);
+      body.set('txtMatricula', matricula);
 
-    if (!responsePost.ok) throw new Error(`Falha no POST: ${responsePost.status}`);
+      const respDay = await fetch(TARGET_URL, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': cookies,
+          'User-Agent': 'Mozilla/5.0'
+        },
+        // @ts-ignore
+        agent,
+        body: body.toString()
+      });
+      html = await respDay.text();
 
-    const htmlContent = await responsePost.text();
+      // Agora clica em Consultar para esse dia
+      const inputsPost = extractAllInputs(html);
+      const bodyConsultar = new URLSearchParams();
+      Object.entries(inputsPost).forEach(([k, v]) => bodyConsultar.append(k, v));
+      bodyConsultar.set('__EVENTTARGET', 'btnConsultar');
+      bodyConsultar.set('txtMatricula', matricula);
 
-    if (htmlContent.includes("Matrícula não encontrada")) {
-      throw new Error("Matrícula inválida no portal.");
+      const respFinal = await fetch(TARGET_URL, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Cookie': cookies,
+          'User-Agent': 'Mozilla/5.0'
+        },
+        // @ts-ignore
+        agent,
+        body: bodyConsultar.toString()
+      });
+      const htmlFinal = await respFinal.text();
+      const times = extractTimes(htmlFinal);
+
+      results.push({
+        date: `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`,
+        times
+      });
     }
 
-    // Passo 3: Extração via Regex (Lógica Python)
-    const timesFound = extractTimesPythonStyle(htmlContent);
-
-    return {
-      matricula,
-      times: timesFound
-    };
-
+    return results;
   } catch (error: any) {
-    console.error("Erro na consulta:", error);
-    throw new Error(error.message || "Erro desconhecido ao processar ponto.");
+    console.error("Erro na consulta mensal:", error);
+    throw new Error(error.message || "Falha ao consultar mês completo.");
   }
 }
