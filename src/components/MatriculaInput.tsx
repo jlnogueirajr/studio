@@ -1,63 +1,152 @@
+
 'use client';
 
 import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, Lock, UserPlus, Key } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useFirestore } from '@/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface MatriculaInputProps {
-  onSearch: (matricula: string) => void;
+  onLogin: (matricula: string, password: string, isSignUp: boolean) => void;
   isLoading: boolean;
-  initialValue?: string;
 }
 
-export function MatriculaInput({ onSearch, isLoading, initialValue = '' }: MatriculaInputProps) {
-  const [value, setValue] = useState(initialValue);
+export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
+  const [step, setStep] = useState<'matricula' | 'password'>('matricula');
+  const [matricula, setMatricula] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isNewUser, setIsNewUser] = useState(false);
+  const [checkingMatricula, setCheckingMatricula] = useState(false);
+  
+  const firestore = useFirestore();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleNextStep = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (value.trim()) {
-      onSearch(value.trim());
+    if (!matricula.trim() || !firestore) return;
+
+    setCheckingMatricula(true);
+    try {
+      // Especial para admin hardcoded
+      if (matricula === '000000') {
+        setIsNewUser(false);
+        setStep('password');
+      } else {
+        const docRef = doc(firestore, 'userProfiles', matricula);
+        const docSnap = await getDoc(docRef);
+        setIsNewUser(!docSnap.exists());
+        setStep('password');
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setCheckingMatricula(false);
     }
   };
 
+  const handleSubmitLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isNewUser && password !== confirmPassword) {
+      alert("As senhas não coincidem!");
+      return;
+    }
+    onLogin(matricula, password, isNewUser);
+  };
+
   return (
-    <Card className="w-full max-w-md mx-auto shadow-xl border-primary/20">
+    <Card className="w-full max-w-md mx-auto shadow-2xl border-primary/20 bg-white">
       <CardHeader>
-        <CardTitle className="text-2xl font-headline flex items-center gap-2">
-          <Search className="w-6 h-6 text-primary" />
-          Acessar Ponto
+        <div className="mx-auto bg-primary/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+          {step === 'matricula' ? (
+            <Search className="w-8 h-8 text-primary" />
+          ) : isNewUser ? (
+            <UserPlus className="w-8 h-8 text-primary" />
+          ) : (
+            <Key className="w-8 h-8 text-primary" />
+          )}
+        </div>
+        <CardTitle className="text-2xl font-black text-center text-slate-800">
+          {step === 'matricula' ? 'ACESSAR PONTO' : isNewUser ? 'PRIMEIRO ACESSO' : 'INFORME SUA SENHA'}
         </CardTitle>
-        <CardDescription>
-          Informe seu número de matrícula para consultar suas horas.
+        <CardDescription className="text-center font-bold">
+          {step === 'matricula' 
+            ? 'Digite sua matrícula para começar.' 
+            : isNewUser 
+              ? 'Defina uma senha segura para seus próximos acessos.' 
+              : `Bem-vindo de volta! Digite a senha da matrícula ${matricula}.`}
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="space-y-2">
-            <Input
-              type="text"
-              placeholder="Digite sua matrícula..."
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              disabled={isLoading}
-              className="text-lg h-12 focus-visible:ring-primary border-primary/20"
-            />
-          </div>
-          <Button 
-            type="submit" 
-            disabled={isLoading || !value.trim()} 
-            className="w-full h-12 text-lg font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all active:scale-95"
-          >
-            {isLoading ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : (
-              <Search className="mr-2 h-5 w-5" />
-            )}
-            Consultar
-          </Button>
-        </form>
+        {step === 'matricula' ? (
+          <form onSubmit={handleNextStep} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                type="text"
+                placeholder="000000"
+                value={matricula}
+                onChange={(e) => setMatricula(e.target.value)}
+                disabled={checkingMatricula || isLoading}
+                className="text-center text-2xl h-14 font-black tracking-widest focus-visible:ring-primary border-slate-300"
+                autoFocus
+              />
+            </div>
+            <Button 
+              type="submit" 
+              disabled={checkingMatricula || isLoading || !matricula.trim()} 
+              className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
+            >
+              {checkingMatricula ? <Loader2 className="animate-spin" /> : 'Continuar'}
+            </Button>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmitLogin} className="space-y-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Input
+                  type="password"
+                  placeholder="Sua senha"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
+                  className="text-center text-lg h-12 font-bold focus-visible:ring-primary border-slate-300"
+                  autoFocus
+                />
+              </div>
+              {isNewUser && (
+                <div className="space-y-2">
+                  <Input
+                    type="password"
+                    placeholder="Confirme sua senha"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={isLoading}
+                    className="text-center text-lg h-12 font-bold focus-visible:ring-primary border-slate-300"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button 
+                type="submit" 
+                disabled={isLoading || !password.trim()} 
+                className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
+              >
+                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Criar Acesso' : 'Entrar'}
+              </Button>
+              <Button 
+                type="button" 
+                variant="ghost" 
+                onClick={() => setStep('matricula')}
+                className="font-bold text-slate-500"
+              >
+                Voltar
+              </Button>
+            </div>
+          </form>
+        )}
       </CardContent>
     </Card>
   );
