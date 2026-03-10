@@ -1,3 +1,4 @@
+
 'use client';
 
 import {
@@ -12,17 +13,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Edit2, Info } from "lucide-react";
-import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours } from "@/lib/ponto-utils";
+import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface DailyRecordsTableProps {
   records: DailyRecord[];
   fixedDsrDays: number[];
+  referenceDsrSunday?: string | null;
   onEdit: (record: DailyRecord) => void;
 }
 
-export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecordsTableProps) {
+export function DailyRecordsTable({ records, fixedDsrDays, referenceDsrSunday, onEdit }: DailyRecordsTableProps) {
   return (
     <Card className="shadow-lg border-primary/10 overflow-hidden bg-white">
       <CardHeader className="bg-slate-50 border-b border-primary/10 py-4">
@@ -63,21 +65,17 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
               records.map((record) => {
                 const [day, month, year] = record.date.split('/').map(Number);
                 const dateObj = new Date(year, month - 1, day);
-                const dayOfWeek = dateObj.getDay();
                 
-                // Lógica de DSR: Prioriza override manual, depois configuração fixa
-                let isDsr = fixedDsrDays.includes(dayOfWeek);
+                let isDsr = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday);
                 if (record.isManualDsr) isDsr = true;
                 if (record.isManualWork) isDsr = false;
 
                 const isNoTime = !record.times || record.times.length === 0;
-
                 const sorted = sortPontoHours(record.times);
-                const entryTimes = sorted.filter((_, i) => i % 2 === 0);
-                const exitTimes = sorted.filter((_, i) => i % 2 !== 0);
-                
-                const workedMinutes = calculateDailyWorkedMinutes(entryTimes, exitTimes);
-                const formattedHours = minutesToTime(workedMinutes);
+                const workedMinutes = calculateDailyWorkedMinutes(
+                  sorted.filter((_, i) => i % 2 === 0),
+                  sorted.filter((_, i) => i % 2 !== 0)
+                );
                 
                 const DAILY_GOAL = 7 * 60 + 20;
                 const goalForDay = isDsr ? 0 : DAILY_GOAL;
@@ -122,16 +120,13 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                         {isOdd && (
                           <Badge variant="destructive" className="animate-pulse py-0 h-5 font-bold uppercase text-[9px]">Batida Ímpar</Badge>
                         )}
-                        {(record.isManualDsr || record.isManualWork) && (
-                          <Badge variant="outline" className="text-[9px] py-0 border-primary/40 text-primary/60">Ajustado</Badge>
-                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-black text-slate-900 text-base tabular-nums">
                       {isNoTime && isDsr ? (
                         <span className="text-slate-300">---</span>
                       ) : (
-                        <span>{formattedHours}</span>
+                        <span>{minutesToTime(workedMinutes)}</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right font-black text-base tabular-nums">

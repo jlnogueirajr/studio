@@ -1,24 +1,24 @@
+
 'use client';
 
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, TrendingUp, CalendarDays, Coffee } from "lucide-react";
-import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours } from '@/lib/ponto-utils';
+import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
 import { DailyRecord } from '@/app/page';
 
 interface SummaryCardsProps {
   records: DailyRecord[];
   previousBalance: string;
   fixedDsrDays: number[];
+  referenceDsrSunday?: string | null;
 }
 
-export function SummaryCards({ records, previousBalance, fixedDsrDays }: SummaryCardsProps) {
+export function SummaryCards({ records, previousBalance, fixedDsrDays, referenceDsrSunday }: SummaryCardsProps) {
   const stats = useMemo(() => {
     if (!records || records.length === 0) return { monthTotal: '00:00', monthBalance: '00:00', totalBalance: '00:00', isPositive: true, dsrCount: 0 };
 
-    // Meta diária padrão: 07:20 (440 minutos)
     const DAILY_GOAL = 7 * 60 + 20;
-
     let totalWorkedMinutes = 0;
     let totalGoalMinutes = 0;
     let dsrCount = 0;
@@ -26,27 +26,21 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
     records.forEach(record => {
       const [day, month, year] = record.date.split('/').map(Number);
       const dateObj = new Date(year, month - 1, day);
-      const dayOfWeek = dateObj.getDay();
 
-      // Resolve se o dia é DSR (Prioriza override manual)
-      let isDsr = fixedDsrDays.includes(dayOfWeek);
+      let isDsr = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday);
       if (record.isManualDsr) isDsr = true;
       if (record.isManualWork) isDsr = false;
 
       if (isDsr) dsrCount++;
 
-      // Calcula o que foi trabalhado no dia
       const sorted = sortPontoHours(record.times);
-      const entryTimes = sorted.filter((_, i) => i % 2 === 0);
-      const exitTimes = sorted.filter((_, i) => i % 2 !== 0);
-      const dailyWorked = calculateDailyWorkedMinutes(entryTimes, exitTimes);
+      const dailyWorked = calculateDailyWorkedMinutes(
+        sorted.filter((_, i) => i % 2 === 0),
+        sorted.filter((_, i) => i % 2 !== 0)
+      );
       
       totalWorkedMinutes += dailyWorked;
-
-      // Adiciona meta se não for DSR
-      if (!isDsr) {
-        totalGoalMinutes += DAILY_GOAL;
-      }
+      if (!isDsr) totalGoalMinutes += DAILY_GOAL;
     });
 
     const prevBalanceMinutes = timeToMinutes(previousBalance);
@@ -60,7 +54,7 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
       isPositive: totalBalanceMinutes >= 0,
       dsrCount
     };
-  }, [records, previousBalance, fixedDsrDays]);
+  }, [records, previousBalance, fixedDsrDays, referenceDsrSunday]);
 
   return (
     <div className="grid gap-4 md:grid-cols-4">

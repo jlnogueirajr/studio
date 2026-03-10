@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,6 +8,7 @@ import { DailyRecordsTable } from '@/components/dashboard/DailyRecordsTable';
 import { PreviousBalanceDialog } from '@/components/PreviousBalanceDialog';
 import { DsrSettingsDialog } from '@/components/DsrSettingsDialog';
 import { EditTimesDialog } from '@/components/EditTimesDialog';
+import { CalendarViewDialog } from '@/components/CalendarViewDialog';
 import { fetchMonthData } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
 import { Trash2, RefreshCcw, LogOut, Loader2, Calendar, Settings } from 'lucide-react';
@@ -21,8 +23,8 @@ export type DailyRecord = {
   date: string;
   times: string[];
   monthlyTimeLogId?: string;
-  isManualDsr?: boolean; // Se o usuário forçou esse dia como Folga
-  isManualWork?: boolean; // Se o usuário forçou esse dia como Útil
+  isManualDsr?: boolean; 
+  isManualWork?: boolean; 
 };
 
 export type EmployeeData = {
@@ -30,6 +32,7 @@ export type EmployeeData = {
   previousBalance: string;
   lastFetch: string;
   fixedDsrDays: number[];
+  referenceDsrSunday?: string | null;
   dailyRecords: DailyRecord[];
 };
 
@@ -39,6 +42,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
   const [showDsrDialog, setShowDsrDialog] = useState(false);
+  const [showCalendarDialog, setShowCalendarDialog] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DailyRecord | null>(null);
   
   const firestore = useFirestore();
@@ -92,7 +96,8 @@ export default function Home() {
           ...base,
           matricula: m,
           dailyRecords: sortedRecords,
-          fixedDsrDays: base.fixedDsrDays || [0] // Default Domingo
+          fixedDsrDays: base.fixedDsrDays || [0],
+          referenceDsrSunday: base.referenceDsrSunday || null
         });
       } else {
         setEmployeeData(null);
@@ -129,6 +134,7 @@ export default function Home() {
         registrationNumber: m,
         expectedMonthlyHours: 160,
         fixedDsrDays: stored?.fixedDsrDays || [0],
+        referenceDsrSunday: stored?.referenceDsrSunday || null,
         previousBalance: stored?.previousBalance || '00:00',
         lastFetch: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -149,7 +155,6 @@ export default function Home() {
         const dayId = record.date.replace(/\//g, '-');
         const dayRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries', dayId);
         
-        // Mantém overrides manuais se já existirem
         batch.set(dayRef, {
           ...record,
           id: dayId,
@@ -183,12 +188,12 @@ export default function Home() {
     }
   };
 
-  const handleSaveDsr = async (days: number[]) => {
+  const handleSaveDsrSettings = async (days: number[], referenceSunday: string | null) => {
     if (employeeData && matricula && firestore && user) {
       try {
         const docRef = doc(firestore, 'users', user.uid, 'employees', matricula);
-        await setDoc(docRef, { fixedDsrDays: days }, { merge: true });
-        setEmployeeData({ ...employeeData, fixedDsrDays: days });
+        await setDoc(docRef, { fixedDsrDays: days, referenceDsrSunday: referenceSunday }, { merge: true });
+        setEmployeeData({ ...employeeData, fixedDsrDays: days, referenceDsrSunday: referenceSunday });
         setShowDsrDialog(false);
         toast({ title: "Configuração de DSR salva" });
       } catch (e) { toast({ variant: "destructive", title: "Erro ao salvar" }); }
@@ -203,7 +208,6 @@ export default function Home() {
         
         await setDoc(dayRef, { times, isManualDsr, isManualWork }, { merge: true });
         
-        // Atualiza estado local
         const updatedRecords = employeeData?.dailyRecords.map(r => 
           r.id === editingRecord.id ? { ...r, times, isManualDsr, isManualWork } : r
         ) || [];
@@ -241,7 +245,8 @@ export default function Home() {
           </div>
           {matricula && (
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)}><Settings className="w-4 h-4 mr-2" /> DSRs</Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCalendarDialog(true)} className="bg-white"><Calendar className="w-4 h-4 mr-2" /> Calendário</Button>
+              <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-white"><Settings className="w-4 h-4 mr-2" /> DSRs</Button>
               <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={handleClear}><Trash2 className="w-4 h-4 mr-2" /> Limpar</Button>
               <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }}><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
             </div>
@@ -260,8 +265,8 @@ export default function Home() {
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <h2 className="text-2xl font-semibold">Matrícula <span className="text-primary">#{matricula}</span></h2>
               <div className="flex gap-2">
-                <Button onClick={() => setShowBalanceDialog(true)} variant="outline" size="sm"><Calendar className="w-4 h-4 mr-2" /> Saldo Anterior</Button>
-                <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm"><RefreshCcw className="w-4 h-4 mr-2" /> Sincronizar</Button>
+                <Button onClick={() => setShowBalanceDialog(true)} variant="outline" size="sm" className="bg-white text-slate-700 border-slate-200"><Calendar className="w-4 h-4 mr-2" /> Saldo Anterior</Button>
+                <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm" className="shadow-lg"><RefreshCcw className="w-4 h-4 mr-2" /> Sincronizar</Button>
               </div>
             </div>
 
@@ -269,18 +274,36 @@ export default function Home() {
               records={employeeData?.dailyRecords || []} 
               previousBalance={employeeData?.previousBalance || '00:00'}
               fixedDsrDays={employeeData?.fixedDsrDays || [0]}
+              referenceDsrSunday={employeeData?.referenceDsrSunday}
             />
 
             <DailyRecordsTable 
               records={employeeData?.dailyRecords || []} 
               fixedDsrDays={employeeData?.fixedDsrDays || [0]}
+              referenceDsrSunday={employeeData?.referenceDsrSunday}
               onEdit={(record) => setEditingRecord(record)}
             />
           </div>
         )}
 
         <PreviousBalanceDialog isOpen={showBalanceDialog} onSave={handleSaveBalance} onClose={() => setShowBalanceDialog(false)} />
-        <DsrSettingsDialog isOpen={showDsrDialog} fixedDsrDays={employeeData?.fixedDsrDays || [0]} onSave={handleSaveDsr} onClose={() => setShowDsrDialog(false)} />
+        
+        <DsrSettingsDialog 
+          isOpen={showDsrDialog} 
+          fixedDsrDays={employeeData?.fixedDsrDays || [0]} 
+          referenceSunday={employeeData?.referenceDsrSunday || null}
+          onSave={handleSaveDsrSettings} 
+          onClose={() => setShowDsrDialog(false)} 
+        />
+
+        <CalendarViewDialog 
+          isOpen={showCalendarDialog}
+          records={employeeData?.dailyRecords || []}
+          fixedDsrDays={employeeData?.fixedDsrDays || [0]}
+          referenceDsrSunday={employeeData?.referenceDsrSunday}
+          onClose={() => setShowCalendarDialog(false)}
+        />
+
         {editingRecord && (
           <EditTimesDialog 
             isOpen={!!editingRecord} 
