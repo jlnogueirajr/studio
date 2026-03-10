@@ -46,17 +46,21 @@ export function SummaryCards({
         sorted.filter((_, i) => i % 2 !== 0)
       );
       
-      totalWorkedMinutes += dailyWorked;
-
       const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
-      const isSystemFolga = calendarDsr || calendarHoliday || record.isHoliday;
+      const isSystemHoliday = calendarHoliday || record.isHoliday;
+      const isSystemDsr = calendarDsr;
       
-      const isMetaZero = (isManualFolga || isSystemFolga) && !record.isManualWork;
-      let goalForDay = isMetaZero ? 0 : dailyWorkload;
+      const isMetaZero = (isManualFolga || isSystemHoliday || isSystemDsr) && !record.isManualWork;
+      
+      // Se houve trabalho ou não é meta zero, conta meta. Se não trabalhou nada e é dia útil, meta cheia.
+      const goalForDay = isMetaZero ? 0 : dailyWorkload;
 
-      totalGoalMinutes += goalForDay;
+      if (dailyWorked > 0 || !isMetaZero) {
+        totalWorkedMinutes += dailyWorked;
+        totalGoalMinutes += goalForDay;
+      }
       
-      if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) holidayCredits++;
+      if ((isSystemHoliday) && dailyWorked > 0) holidayCredits++;
       if (record.isCompensation) holidayUsed++;
     });
 
@@ -90,7 +94,7 @@ export function SummaryCards({
             "text-2xl font-black",
             stats.isMonthPositive ? "text-primary" : "text-destructive"
           )}>{stats.monthBalance}</div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Horas Extras/Débito deste Mês</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Crédito/Débito Mensal</p>
         </CardContent>
       </Card>
 
@@ -109,7 +113,7 @@ export function SummaryCards({
           )}>
             {stats.holidayBalance} dias
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Feriados Acumulados</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Feriados p/ Compensar</p>
         </CardContent>
       </Card>
 
@@ -120,7 +124,7 @@ export function SummaryCards({
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-black text-foreground">{minutesToTime(dailyWorkload)}</div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Base de Cálculo</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Base de Horas</p>
         </CardContent>
       </Card>
 
@@ -142,7 +146,7 @@ export function SummaryCards({
           )}>
             {stats.totalBalance}
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Saldo Geral (Meses Ant. + Atual)</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Saldo Acumulado Geral</p>
         </CardContent>
       </Card>
     </div>
