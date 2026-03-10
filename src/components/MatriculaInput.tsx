@@ -53,9 +53,16 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
 
   const handleResetAccess = async () => {
     if (!firestore || !matricula) return;
+    const cleanMatricula = matricula.trim();
+
+    // Bloqueia reset para conta administrador via interface pública
+    if (cleanMatricula === '000000') {
+      toast({ variant: "destructive", title: "Acesso Protegido", description: "A senha do administrador é fixa e não pode ser resetada aqui." });
+      return;
+    }
+
     setReseting(true);
     try {
-      const cleanMatricula = matricula.trim();
       const docRef = doc(firestore, 'userProfiles', cleanMatricula);
       const docSnap = await getDoc(docRef);
       
@@ -97,6 +104,8 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
     }
     onLogin(matricula.trim(), password, isNewUser);
   };
+
+  const isAdminMatricula = matricula.trim() === '000000';
 
   return (
     <Card className="w-full max-w-md mx-auto shadow-2xl border-primary/20 bg-white">
@@ -179,7 +188,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar' : 'Entrar'}
               </Button>
               
-              {!isNewUser && (
+              {!isNewUser && !isAdminMatricula && (
                 <Button 
                   type="button" 
                   variant="ghost" 
