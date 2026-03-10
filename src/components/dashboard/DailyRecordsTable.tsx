@@ -39,25 +39,25 @@ export function DailyRecordsTable({
       <CardHeader className="bg-muted/50 border-b border-border py-4">
         <CardTitle className="text-lg flex items-center justify-between font-black text-foreground">
           <div className="flex items-center gap-2">
-            <span>HISTÓRICO DE JORNADA</span>
+            <span>DETALHAMENTO DE HORAS EXTRAS</span>
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger>
                   <Info className="w-4 h-4 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none shadow-xl">
-                  <p className="font-bold text-xs">Regras de Cálculo:</p>
+                  <p className="font-bold text-xs">Cálculo de Extras:</p>
                   <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px] font-medium">
-                    <li>Hora Noturna: Ganho de 1.1428x entre 22h e 05h.</li>
-                    <li>Meta Zero: Dias marcados como Folga, DSR ou Feriado não descontam saldo.</li>
-                    <li>Trabalho em Feriado/DSR: Todo o tempo trabalhado vira crédito extra.</li>
+                    <li>Hora Extra = Total Trabalhado - Meta do Dia.</li>
+                    <li>Em Folgas/DSR/Feriados, a Meta é 0 (Tudo vira Extra).</li>
+                    <li>O bônus noturno já está incluso no total trabalhado.</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
           <span className="text-[10px] font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 uppercase">
-            {records.length} Dias Exibidos
+            {records.length} Dias no Histórico
           </span>
         </CardTitle>
       </CardHeader>
@@ -67,8 +67,8 @@ export function DailyRecordsTable({
             <TableRow className="bg-muted/30 hover:bg-muted/30">
               <TableHead className="w-[140px] font-black text-foreground uppercase text-[11px] border-r">Data / Dia</TableHead>
               <TableHead className="font-black text-foreground uppercase text-[11px]">Tratamento / Batidas</TableHead>
-              <TableHead className="text-right font-black text-foreground uppercase text-[11px]">Trabalhado</TableHead>
-              <TableHead className="text-right font-black text-foreground uppercase text-[11px] border-l">Saldo Dia</TableHead>
+              <TableHead className="text-right font-black text-foreground uppercase text-[11px]">Total Trabalhado</TableHead>
+              <TableHead className="text-right font-black text-foreground uppercase text-[11px] border-l bg-primary/5">Hora Extra (+/-)</TableHead>
               <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -80,7 +80,6 @@ export function DailyRecordsTable({
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
-                // Prioridade absoluta para marcações manuais de folga
                 const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
                 const isSystemFolga = calendarDsr || calendarHoliday || record.isHoliday;
                 const isMetaZeroDay = (isManualFolga || isSystemFolga) && !record.isManualWork;
@@ -91,7 +90,6 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                // Se é meta zero, a meta é 0. Caso contrário, é a carga diária.
                 const goalForDay = isMetaZeroDay ? 0 : dailyWorkload;
                 const dailyBalance = workedMinutes - goalForDay;
                 const isNoTime = !record.times || record.times.length === 0;
@@ -153,7 +151,7 @@ export function DailyRecordsTable({
                     <TableCell className="text-right font-black text-foreground text-base tabular-nums">
                       {workedMinutes > 0 ? minutesToTime(workedMinutes) : "---"}
                     </TableCell>
-                    <TableCell className="text-right font-black text-base tabular-nums border-l">
+                    <TableCell className="text-right font-black text-base tabular-nums border-l bg-primary/5">
                       <span className={cn(
                         "px-2 py-0.5 rounded",
                         dailyBalance >= 0 

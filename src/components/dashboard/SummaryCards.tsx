@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Clock, TrendingUp, Landmark, Coffee } from "lucide-react";
+import { Clock, TrendingUp, Landmark, Coffee, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
 import { DailyRecord } from '@/app/page';
 import { cn } from '@/lib/utils';
@@ -51,14 +51,11 @@ export function SummaryCards({
       const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
       const isSystemFolga = calendarDsr || calendarHoliday || record.isHoliday;
       
-      // Se for folga (manual ou sistema) e não for trabalho forçado, meta é 0
       const isMetaZero = (isManualFolga || isSystemFolga) && !record.isManualWork;
-      
       let goalForDay = isMetaZero ? 0 : dailyWorkload;
 
       totalGoalMinutes += goalForDay;
       
-      // Contabilidade de feriados para o Card de Folgas
       if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) holidayCredits++;
       if (record.isCompensation) holidayUsed++;
     });
@@ -70,22 +67,30 @@ export function SummaryCards({
     return {
       monthTotal: minutesToTime(totalWorkedMinutes),
       monthBalance: minutesToTime(monthBalanceMinutes, true),
+      monthBalanceMinutes,
       totalBalance: minutesToTime(totalBalanceMinutes, true),
       isPositive: totalBalanceMinutes >= 0,
+      isMonthPositive: monthBalanceMinutes >= 0,
       holidayBalance: holidayCredits - holidayUsed + (previousHolidayBalance || 0),
     };
   }, [records, previousBalance, previousHolidayBalance, fixedDsrDays, referenceDsrSunday, dailyWorkload, holidays]);
 
   return (
     <div className="grid gap-4 md:grid-cols-4">
-      <Card className="border-l-4 border-l-primary shadow-sm bg-card transition-colors">
+      <Card className={cn(
+        "border-l-4 shadow-sm bg-card transition-colors",
+        stats.isMonthPositive ? 'border-l-primary' : 'border-l-destructive'
+      )}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Trabalhado Mês</CardTitle>
-          <Clock className="h-4 w-4 text-primary" />
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Saldo do Mês</CardTitle>
+          {stats.isMonthPositive ? <ArrowUpRight className="h-4 w-4 text-primary" /> : <ArrowDownRight className="h-4 w-4 text-destructive" />}
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-black text-foreground">{stats.monthTotal}</div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Tempo Efetivo (Inc. Noturna)</p>
+          <div className={cn(
+            "text-2xl font-black",
+            stats.isMonthPositive ? "text-primary" : "text-destructive"
+          )}>{stats.monthBalance}</div>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Horas Extras/Débito deste Mês</p>
         </CardContent>
       </Card>
 
@@ -137,7 +142,7 @@ export function SummaryCards({
           )}>
             {stats.totalBalance}
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Saldo Geral HH:MM</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Saldo Geral (Meses Ant. + Atual)</p>
         </CardContent>
       </Card>
     </div>
