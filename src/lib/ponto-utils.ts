@@ -90,13 +90,45 @@ export function sortPontoHours(hours: string[]): string[] {
   return [...hours].sort((a, b) => {
     const minA = timeToMinutes(a);
     const minB = timeToMinutes(b);
-    // Tratamento para batidas após meia-noite aparecerem depois das da noite anterior
-    const isAMad = minA < 300; 
-    const isBMad = minB < 300;
+    // Batidas de madrugada (ex: 00:30) devem aparecer no final da lista se houver batidas de tarde/noite
+    const isAMad = minA < 360; // Antes das 06:00
+    const isBMad = minB < 360;
     if (isAMad && !isBMad) return 1;
     if (!isAMad && isBMad) return -1;
     return minA - minB;
   });
+}
+
+/**
+ * Normaliza registros para turnos noturnos.
+ * Se um dia começa com batidas de madrugada e o dia anterior terminou ímpar, move para o anterior.
+ */
+export function normalizeNightShifts(records: any[]): any[] {
+  // Ordena cronologicamente para processar a sequência
+  const sorted = [...records].sort((a, b) => {
+    const [dA, mA, yA] = a.date.split('/').map(Number);
+    const [dB, mB, yB] = b.date.split('/').map(Number);
+    return new Date(yA, mA - 1, dA).getTime() - new Date(yB, mB - 1, dB).getTime();
+  });
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+
+    // Se o dia anterior tem número ímpar de batidas (turno aberto)
+    if (prev.times && prev.times.length % 2 !== 0) {
+      // Procura batidas na madrugada do dia atual (antes das 06:00)
+      const madTimes = curr.times.filter((t: string) => timeToMinutes(t) < 360);
+      if (madTimes.length > 0) {
+        // Pega a batida mais cedo da madrugada para fechar o turno anterior
+        const earliest = madTimes.sort((a: string, b: string) => timeToMinutes(a) - timeToMinutes(b))[0];
+        prev.times.push(earliest);
+        curr.times = curr.times.filter((t: string) => t !== earliest);
+      }
+    }
+  }
+
+  return sorted;
 }
 
 /**

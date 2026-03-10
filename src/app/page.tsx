@@ -16,6 +16,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
+import { normalizeNightShifts } from '@/lib/ponto-utils';
 
 export type DailyRecord = {
   id: string;
@@ -78,12 +79,17 @@ export default function Home() {
         const base = docSnap.data();
         const logsRef = collection(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries');
         const logsSnap = await getDocs(logsRef);
-        const records = logsSnap.docs.map(d => d.data() as DailyRecord);
-        const sortedRecords = records.sort((a, b) => {
+        const rawRecords = logsSnap.docs.map(d => d.data() as DailyRecord);
+        
+        // Aplica normalização de jornada noturna
+        const normalized = normalizeNightShifts(rawRecords);
+        
+        const sortedRecords = normalized.sort((a, b) => {
            const [dA, mA, yA] = a.date.split('/').map(Number);
            const [dB, mB, yB] = b.date.split('/').map(Number);
            return new Date(yB, mB-1, dB).getTime() - new Date(yA, mA-1, dA).getTime();
         });
+
         setEmployeeData({
           ...base,
           matricula: m,
@@ -109,10 +115,15 @@ export default function Home() {
       const now = new Date();
       const mYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
       const freshData = await fetchMonthData(m, now.getMonth() + 1, now.getFullYear());
+      
+      // Normaliza antes de salvar
+      const normalizedData = normalizeNightShifts(freshData.map(d => ({ ...d, times: [...d.times] })));
+
       const batch = writeBatch(firestore);
       const empRef = doc(firestore, 'users', user.uid, 'employees', m);
       const empSnap = await getDoc(empRef);
       const stored = empSnap.exists() ? empSnap.data() : null;
+      
       const employeeBase = {
         id: m, registrationNumber: m, expectedMonthlyHours: 160,
         fixedDsrDays: stored?.fixedDsrDays || [0],
@@ -124,14 +135,17 @@ export default function Home() {
         lastFetch: new Date().toISOString(), updatedAt: new Date().toISOString(),
         createdAt: stored?.createdAt || new Date().toISOString()
       };
+      
       batch.set(empRef, employeeBase, { merge: true });
       const logRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', mYear);
       batch.set(logRef, { id: mYear, employeeId: m, year: now.getFullYear(), month: now.getMonth()+1, fetchedAt: new Date().toISOString() }, { merge: true });
-      freshData.forEach(record => {
+      
+      normalizedData.forEach(record => {
         const dayId = record.date.replace(/\//g, '-');
         const dayRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', mYear, 'dailyEntries', dayId);
         batch.set(dayRef, { ...record, id: dayId, monthlyTimeLogId: mYear }, { merge: true });
       });
+      
       await batch.commit();
       await loadEmployeeData(m);
       if (!stored) setShowBalanceDialog(true);
@@ -158,8 +172,9 @@ export default function Home() {
         const mYear = editingRecord.monthlyTimeLogId!;
         const dayRef = doc(firestore, 'users', user.uid, 'employees', matricula, 'monthlyTimeLogs', mYear, 'dailyEntries', editingRecord.id);
         await setDoc(dayRef, { times, ...options }, { merge: true });
-        const updated = employeeData?.dailyRecords.map(r => r.id === editingRecord.id ? { ...r, times, ...options } : r) || [];
-        setEmployeeData(prev => prev ? { ...prev, dailyRecords: updated } : null);
+        
+        // Recarrega tudo para garantir que a normalização noturna seja re-aplicada após edição manual
+        await loadEmployeeData(matricula);
         setEditingRecord(null);
         toast({ title: "Salvo" });
       } catch (e) { toast({ variant: "destructive", title: "Erro" }); }
