@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState } from 'react';
@@ -26,19 +25,21 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
 
   const handleNextStep = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!matricula.trim() || !firestore) return;
+    const cleanMatricula = matricula.trim();
+    if (!cleanMatricula || !firestore) return;
 
     setCheckingMatricula(true);
     try {
-      // Verifica no Firestore se o perfil já existe
-      const docRef = doc(firestore, 'userProfiles', matricula);
+      const docRef = doc(firestore, 'userProfiles', cleanMatricula);
       const docSnap = await getDoc(docRef);
       
-      // Se o documento não existe, é o primeiro acesso
       setIsNewUser(!docSnap.exists());
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
+      // Fallback: se houver erro (ex: offline), assume usuário existente para tentar login
+      setIsNewUser(false);
+      setStep('password');
     } finally {
       setCheckingMatricula(false);
     }
@@ -50,7 +51,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
       alert("As senhas não coincidem!");
       return;
     }
-    onLogin(matricula, password, isNewUser);
+    onLogin(matricula.trim(), password, isNewUser);
   };
 
   return (
@@ -82,7 +83,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
             <div className="space-y-2">
               <Input
                 type="text"
-                placeholder="000000"
+                placeholder="Ex: 000000"
                 value={matricula}
                 onChange={(e) => setMatricula(e.target.value)}
                 disabled={checkingMatricula || isLoading}

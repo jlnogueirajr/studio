@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -81,7 +80,7 @@ export default function Home() {
         const base = docSnap.data();
         const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', monthYear, 'dailyEntries');
         const logsSnap = await getDocs(logsRef);
-        const rawRecords = logsSnap.docs.map(d => d.data() as DailyRecord);
+        const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
         
         const normalized = normalizeNightShifts(rawRecords);
         const sortedRecords = normalized.sort((a, b) => {
@@ -121,13 +120,14 @@ export default function Home() {
       if (isSignUp) {
         await createUserWithEmailAndPassword(auth, email, p);
         const now = new Date().toISOString();
+        const isAdmin = m === '000000';
         const profile = {
           id: m,
           registrationNumber: m,
           email: email,
           createdAt: now,
           updatedAt: now,
-          isAdmin: m === '000000',
+          isAdmin: isAdmin,
           previousBalance: '00:00',
           previousHolidayBalance: 0,
           fixedDsrDays: [0],
@@ -146,10 +146,10 @@ export default function Home() {
       console.error("Erro Auth:", e);
       let errorMsg = "Tente novamente mais tarde.";
       
-      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
+      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-email') {
         errorMsg = "Senha incorreta ou matrícula não localizada.";
       } else if (e.code === 'auth/email-already-in-use') {
-        errorMsg = "Esta matrícula já possui uma conta cadastrada.";
+        errorMsg = "Esta matrícula já possui uma conta cadastrada. Tente fazer login.";
       } else if (e.code === 'auth/weak-password') {
         errorMsg = "A senha deve ter no mínimo 6 caracteres.";
       }
@@ -339,7 +339,8 @@ export default function Home() {
             isOpen={!!editingRecord} record={editingRecord}
             onSave={async (times, options) => {
               if (firestore && user) {
-                const mYear = editingRecord.monthlyTimeLogId!;
+                const now = new Date();
+                const mYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
                 const dayRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', mYear, 'dailyEntries', editingRecord.id);
                 await setDoc(dayRef, { times, ...options }, { merge: true });
                 await loadEmployeeData(matricula);
