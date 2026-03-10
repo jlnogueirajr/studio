@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -22,6 +21,8 @@ export type DailyRecord = {
   date: string;
   times: string[];
   monthlyTimeLogId?: string;
+  isManualDsr?: boolean; // Se o usuário forçou esse dia como Folga
+  isManualWork?: boolean; // Se o usuário forçou esse dia como Útil
 };
 
 export type EmployeeData = {
@@ -78,7 +79,7 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const records = logsSnap.docs.map(d => d.data() as DailyRecord);
         
-        // ORDEM DECRESCENTE para o topo
+        // ORDEM DECRESCENTE para o topo (mais recentes primeiro)
         const sortedRecords = records.sort((a, b) => {
            const [dayA, monthA, yearA] = a.date.split('/').map(Number);
            const [dayB, monthB, yearB] = b.date.split('/').map(Number);
@@ -147,12 +148,14 @@ export default function Home() {
       freshData.forEach(record => {
         const dayId = record.date.replace(/\//g, '-');
         const dayRef = doc(firestore, 'users', user.uid, 'employees', m, 'monthlyTimeLogs', monthYear, 'dailyEntries', dayId);
+        
+        // Mantém overrides manuais se já existirem
         batch.set(dayRef, {
           ...record,
           id: dayId,
           monthlyTimeLogId: monthYear,
           dailyTotalHours: 0
-        });
+        }, { merge: true });
       });
 
       await batch.commit();
@@ -192,22 +195,22 @@ export default function Home() {
     }
   };
 
-  const handleManualEdit = async (times: string[]) => {
+  const handleManualEdit = async (times: string[], isManualDsr: boolean, isManualWork: boolean) => {
     if (editingRecord && matricula && firestore && user) {
       try {
         const monthYear = editingRecord.monthlyTimeLogId!;
         const dayRef = doc(firestore, 'users', user.uid, 'employees', matricula, 'monthlyTimeLogs', monthYear, 'dailyEntries', editingRecord.id);
         
-        await setDoc(dayRef, { times }, { merge: true });
+        await setDoc(dayRef, { times, isManualDsr, isManualWork }, { merge: true });
         
         // Atualiza estado local
         const updatedRecords = employeeData?.dailyRecords.map(r => 
-          r.id === editingRecord.id ? { ...r, times } : r
+          r.id === editingRecord.id ? { ...r, times, isManualDsr, isManualWork } : r
         ) || [];
         
         setEmployeeData(prev => prev ? { ...prev, dailyRecords: updatedRecords } : null);
         setEditingRecord(null);
-        toast({ title: "Horários atualizados manualmente" });
+        toast({ title: "Alterações salvas com sucesso" });
       } catch (e) { toast({ variant: "destructive", title: "Erro ao editar" }); }
     }
   };
@@ -281,8 +284,7 @@ export default function Home() {
         {editingRecord && (
           <EditTimesDialog 
             isOpen={!!editingRecord} 
-            date={editingRecord.date} 
-            initialTimes={editingRecord.times} 
+            record={editingRecord}
             onSave={handleManualEdit} 
             onClose={() => setEditingRecord(null)} 
           />

@@ -1,16 +1,13 @@
-
 'use client';
 
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, TrendingUp, CalendarDays, Coffee } from "lucide-react";
 import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours } from '@/lib/ponto-utils';
+import { DailyRecord } from '@/app/page';
 
 interface SummaryCardsProps {
-  records: Array<{
-    times: string[];
-    date: string;
-  }>;
+  records: DailyRecord[];
   previousBalance: string;
   fixedDsrDays: number[];
 }
@@ -19,36 +16,45 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
   const stats = useMemo(() => {
     if (!records || records.length === 0) return { monthTotal: '00:00', monthBalance: '00:00', totalBalance: '00:00', isPositive: true, dsrCount: 0 };
 
-    // Meta diária padrão: 07:20
+    // Meta diária padrão: 07:20 (440 minutos)
     const DAILY_GOAL = 7 * 60 + 20;
 
-    // Filtra registros que NÃO são DSRs fixos para calcular a meta acumulada
-    const workingDayRecords = records.filter(r => {
-      const [day, month, year] = r.date.split('/').map(Number);
+    let totalWorkedMinutes = 0;
+    let totalGoalMinutes = 0;
+    let dsrCount = 0;
+
+    records.forEach(record => {
+      const [day, month, year] = record.date.split('/').map(Number);
       const dateObj = new Date(year, month - 1, day);
-      return !fixedDsrDays.includes(dateObj.getDay());
-    });
+      const dayOfWeek = dateObj.getDay();
 
-    const dsrCount = records.length - workingDayRecords.length;
+      // Resolve se o dia é DSR (Prioriza override manual)
+      let isDsr = fixedDsrDays.includes(dayOfWeek);
+      if (record.isManualDsr) isDsr = true;
+      if (record.isManualWork) isDsr = false;
 
-    // Total trabalhado no mês (aplicando fator noturno)
-    const workedMinutes = records.reduce((acc, record) => {
+      if (isDsr) dsrCount++;
+
+      // Calcula o que foi trabalhado no dia
       const sorted = sortPontoHours(record.times);
       const entryTimes = sorted.filter((_, i) => i % 2 === 0);
       const exitTimes = sorted.filter((_, i) => i % 2 !== 0);
-      return acc + calculateDailyWorkedMinutes(entryTimes, exitTimes);
-    }, 0);
+      const dailyWorked = calculateDailyWorkedMinutes(entryTimes, exitTimes);
+      
+      totalWorkedMinutes += dailyWorked;
 
-    // Meta total = (dias úteis encontrados) * 07:20
-    const totalGoalMinutes = workingDayRecords.length * DAILY_GOAL;
+      // Adiciona meta se não for DSR
+      if (!isDsr) {
+        totalGoalMinutes += DAILY_GOAL;
+      }
+    });
+
     const prevBalanceMinutes = timeToMinutes(previousBalance);
-    
-    // Saldo do mês = O que trabalhou - O que deveria ter trabalhado (apenas dias úteis)
-    const monthBalanceMinutes = workedMinutes - totalGoalMinutes;
+    const monthBalanceMinutes = totalWorkedMinutes - totalGoalMinutes;
     const totalBalanceMinutes = monthBalanceMinutes + prevBalanceMinutes;
 
     return {
-      monthTotal: minutesToTime(workedMinutes),
+      monthTotal: minutesToTime(totalWorkedMinutes),
       monthBalance: minutesToTime(monthBalanceMinutes, true),
       totalBalance: minutesToTime(totalBalanceMinutes, true),
       isPositive: totalBalanceMinutes >= 0,
@@ -65,7 +71,7 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-black text-slate-900">{stats.monthTotal}</div>
-          <p className="text-[10px] text-muted-foreground font-medium uppercase">Líquido c/ Adicional</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase">Total c/ Adicional Noturno</p>
         </CardContent>
       </Card>
 
@@ -76,7 +82,7 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-black text-slate-900">{stats.dsrCount} dias</div>
-          <p className="text-[10px] text-muted-foreground font-medium uppercase">Isentos de meta</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase">Meta Zero nesses dias</p>
         </CardContent>
       </Card>
 
@@ -87,7 +93,7 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-black text-slate-900">{previousBalance}</div>
-          <p className="text-[10px] text-muted-foreground font-medium uppercase">Acumulado informado</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase">Informado manualmente</p>
         </CardContent>
       </Card>
 
@@ -100,7 +106,7 @@ export function SummaryCards({ records, previousBalance, fixedDsrDays }: Summary
           <div className={`text-2xl font-black ${stats.isPositive ? 'text-green-700' : 'text-destructive'}`}>
             {stats.totalBalance}
           </div>
-          <p className="text-[10px] text-muted-foreground font-medium uppercase">Cálculo: 07:20 / dia útil</p>
+          <p className="text-[10px] text-muted-foreground font-medium uppercase">Meta de 07:20 / dia útil</p>
         </CardContent>
       </Card>
     </div>

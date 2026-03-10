@@ -1,4 +1,3 @@
-
 'use client';
 
 import {
@@ -35,9 +34,10 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                 <TooltipTrigger>
                   <Info className="w-4 h-4 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent>
-                  <p>Dias úteis sem batida geram débito de 07:20.</p>
-                  <p>DSRs não descontam horas do saldo.</p>
+                <TooltipContent className="max-w-xs">
+                  <p>Meta diária: 07:20 (440m).</p>
+                  <p>DSR: Meta zero.</p>
+                  <p>Saldo = Trabalhado - Meta.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -54,6 +54,7 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
               <TableHead className="w-[120px] font-black text-slate-900 uppercase text-[11px]">Data</TableHead>
               <TableHead className="font-black text-slate-900 uppercase text-[11px]">Registros / Status</TableHead>
               <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Horas Úteis</TableHead>
+              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Saldo Dia</TableHead>
               <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
@@ -63,7 +64,12 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                 const [day, month, year] = record.date.split('/').map(Number);
                 const dateObj = new Date(year, month - 1, day);
                 const dayOfWeek = dateObj.getDay();
-                const isFixedDsr = fixedDsrDays.includes(dayOfWeek);
+                
+                // Lógica de DSR: Prioriza override manual, depois configuração fixa
+                let isDsr = fixedDsrDays.includes(dayOfWeek);
+                if (record.isManualDsr) isDsr = true;
+                if (record.isManualWork) isDsr = false;
+
                 const isNoTime = !record.times || record.times.length === 0;
 
                 const sorted = sortPontoHours(record.times);
@@ -72,6 +78,11 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                 
                 const workedMinutes = calculateDailyWorkedMinutes(entryTimes, exitTimes);
                 const formattedHours = minutesToTime(workedMinutes);
+                
+                const DAILY_GOAL = 7 * 60 + 20;
+                const goalForDay = isDsr ? 0 : DAILY_GOAL;
+                const dailyBalance = workedMinutes - goalForDay;
+
                 const isOdd = sorted.length % 2 !== 0;
                 
                 return (
@@ -87,12 +98,12 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                         {isNoTime ? (
                           <Badge 
                             variant="outline" 
-                            className={isFixedDsr 
+                            className={isDsr 
                               ? "border-green-600 text-green-700 bg-green-50 font-bold px-3 py-1" 
                               : "border-red-600 text-red-700 bg-red-50 font-bold px-3 py-1 animate-pulse"
                             }
                           >
-                            {isFixedDsr ? "FOLGA / DSR" : "FALTA / DÉBITO"}
+                            {isDsr ? "FOLGA / DSR" : "FALTA / DÉBITO"}
                           </Badge>
                         ) : (
                           sorted.map((time, i) => (
@@ -111,16 +122,22 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                         {isOdd && (
                           <Badge variant="destructive" className="animate-pulse py-0 h-5 font-bold uppercase text-[9px]">Batida Ímpar</Badge>
                         )}
+                        {(record.isManualDsr || record.isManualWork) && (
+                          <Badge variant="outline" className="text-[9px] py-0 border-primary/40 text-primary/60">Ajustado</Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-black text-slate-900 text-base tabular-nums">
-                      {isNoTime && isFixedDsr ? (
+                      {isNoTime && isDsr ? (
                         <span className="text-slate-300">---</span>
                       ) : (
-                        <span className={workedMinutes === 0 ? "text-red-600" : "text-slate-900"}>
-                          {formattedHours}
-                        </span>
+                        <span>{formattedHours}</span>
                       )}
+                    </TableCell>
+                    <TableCell className="text-right font-black text-base tabular-nums">
+                      <span className={dailyBalance >= 0 ? "text-green-600" : "text-destructive"}>
+                        {minutesToTime(dailyBalance, true)}
+                      </span>
                     </TableCell>
                     <TableCell className="text-center">
                       <Button 
@@ -137,11 +154,10 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-48 text-center text-muted-foreground font-medium">
+                <TableCell colSpan={5} className="h-48 text-center text-muted-foreground font-medium">
                   <div className="flex flex-col items-center gap-2">
                     <Info className="w-8 h-8 text-slate-200" />
                     <p>Nenhum registro encontrado.</p>
-                    <p className="text-xs">Sincronize com o portal para carregar os dados.</p>
                   </div>
                 </TableCell>
               </TableRow>
