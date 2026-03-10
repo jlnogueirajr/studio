@@ -3,100 +3,123 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * PONTO ÁGIL SECURITY RULES
-     * 
-     * Core Philosophy:
-     * This ruleset implements a strict User-Ownership model. All application data is 
-     * organized hierarchically under a top-level /users/{userId} path. This structure 
-     * ensures that a user's identity is intrinsically linked to every data access 
-     * request via the document path itself.
-     * 
-     * Data Structure:
-     * - /users/{userId}/employees/{employeeId}: Individual employee records.
-     * - .../monthlyTimeLogs/{logId}: Consolidated monthly data for an employee.
-     * - .../dailyEntries/{entryId}: Specific shift and hour details for a day.
-     * 
-     * Key Security Decisions:
-     * 1. Path-Based Authorization: We use the {userId} wildcard in the path to 
-     *    authorize all operations. This eliminates the need for expensive get() 
-     *    calls to parent documents.
-     * 2. Implicit Denormalization: By nesting data, the authorization context 
-     *    (who owns the data) is preserved throughout the subcollection tree.
-     * 3. Structural Segregation: User data is completely isolated. There are no 
-     *    shared collections or public read/write paths in this application.
-     * 4. Relational Integrity: On creation, we enforce that internal reference 
-     *    IDs (like employeeId or monthlyTimeLogId) match the IDs provided in the path.
+     * PONTO ÁGIL - FIRESTORE SECURITY RULES
+     *
+     * CORE PHILOSOPHY:
+     * This ruleset implements a strict hierarchical ownership model combined with role-based access 
+     * control for administrators. Security is enforced primarily through the document path, ensuring 
+     * that users can only access data nested under their own unique identifier.
+     *
+     * DATA STRUCTURE:
+     * All application data is organized under the `/userProfiles/{userId}` path. 
+     * - User Profiles: Contain basic registration info and the `isAdmin` flag.
+     * - Monthly Summaries: Subcollection under a specific user profile.
+     * - Daily Entries: Subcollection under a specific monthly summary.
+     *
+     * KEY SECURITY DECISIONS:
+     * 1. Path-Based Authorization: By nesting data under `{userId}`, we verify ownership by 
+     *    comparing `request.auth.uid` directly to the path wildcard. This is the most performant 
+     *    method and avoids costly `get()` calls for standard user operations.
+     * 2. Administrative Override: A dedicated `isAdmin` flag on the user's profile document 
+     *    grants global read/write access to facilitate the requested admin panel functionality.
+     * 3. Structural Segregation: User data is kept entirely separate from other users' trees 
+     *    to prevent accidental data leakage or unauthorized listing.
+     * 4. Relational Integrity: On document creation, we enforce that the internal `id` or 
+     *    ownership fields match the document path to ensure data consistency.
+     *
+     * PROTOTYPING MODE:
+     * These rules prioritize authorization (who can access) over schema validation (what is 
+     * being saved). Data types and optional fields are not strictly enforced to allow for 
+     * rapid development and schema evolution.
      */
 
     // --- GLOBAL HELPER FUNCTIONS ---
 
-    /** @description Checks if the request is from an authenticated user. */
+    /**
+     * @description Checks if the request is coming from a signed-in user.
+     */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /** @description Validates if the authenticated user matches the owner ID in the path. */
+    /**
+     * @description Checks if the authenticated user matches the provided userId.
+     */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    /** @description Combines ownership check with a check for the existing document's existence. */
+    /**
+     * @description Checks if the authenticated user has the 'isAdmin' flag set to true in their profile.
+     * This function performs a document read and should be used judiciously.
+     */
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.isAdmin == true;
+    }
+
+    /**
+     * @description Combines ownership check with a check for document existence.
+     * Used for secure updates and deletes.
+     */
     function isExistingOwner(userId) {
       return resource != null && isOwner(userId);
     }
 
-    /** @description Validates that a field in the incoming data has not been modified. */
-    function isUnchanged(field) {
-      return request.resource.data[field] == resource.data[field];
+    /**
+     * @description Combines admin check with a check for document existence.
+     */
+    function isExistingAdmin() {
+      return resource != null && isAdmin();
     }
 
     // --- COLLECTION RULES ---
 
     /**
-     * @description Rules for managing employee records owned by a user.
-     * @path /users/{userId}/employees/{employeeId}
-     * @allow (create) if auth.uid matches {userId} and data.id matches {employeeId}.
-     * @deny (list) if auth.uid does not match {userId}.
-     * @principle Path-based ownership and relational integrity for the root entity.
+     * @description Rules for User Profiles. Allows users to manage their own profile and admins to manage all.
+     * @path /userProfiles/{userId}
+     * @allow (get) If user is owner or admin.
+     * @allow (create) If user is creating their own profile.
+     * @deny (list) If user is not an admin.
+     * @principle Ownership-based root access with administrative elevation.
      */
-    match /users/{userId}/employees/{employeeId} {
-      allow get, list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.id == employeeId;
-      allow update: if isExistingOwner(userId) && isUnchanged('id');
-      allow delete: if isExistingOwner(userId);
+    match /userProfiles/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if (isExistingOwner(userId) || isExistingAdmin()) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingAdmin();
 
       /**
-       * @description Rules for monthly time logs associated with an employee.
-       * @path /users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}
-       * @allow (get) if auth.uid matches {userId}.
-       * @deny (create) if data.employeeId does not match {employeeId} in the path.
-       * @principle Ensures monthly logs are correctly linked to their parent employee.
+       * @description Rules for Monthly Summaries. Nested data tied to a specific user.
+       * @path /userProfiles/{userId}/monthlySummaries/{summaryId}
+       * @allow (list) If user owns the parent profile.
+       * @deny (update) If modifying the userProfileId link.
+       * @principle Path-based authorization for subcollections.
        */
-      match /monthlyTimeLogs/{monthlyTimeLogId} {
-        allow get, list: if isOwner(userId);
-        allow create: if isOwner(userId) && request.resource.data.employeeId == employeeId;
-        allow update: if isExistingOwner(userId) && isUnchanged('employeeId');
-        allow delete: if isExistingOwner(userId);
+      match /monthlySummaries/{summaryId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        
+        allow create: if (isOwner(userId) || isAdmin()) && request.resource.data.userProfileId == userId;
+        allow update: if (isExistingOwner(userId) || isExistingAdmin()) && request.resource.data.userProfileId == resource.data.userProfileId;
+        allow delete: if isExistingAdmin();
 
         /**
-         * @description Rules for daily entries within a specific monthly log.
-         * @path /users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}/dailyEntries/{dailyEntryId}
-         * @allow (create) if auth.uid matches {userId} and dailyEntry links to monthlyTimeLogId.
-         * @deny (update) if user tries to move the entry to a different monthly log.
-         * @principle Deeply nested path-based security and relational immutability.
+         * @description Rules for Daily Point Entries.
+         * @path /userProfiles/{userId}/monthlySummaries/{summaryId}/dailyEntries/{entryId}
+         * @allow (create) If user is the owner of the hierarchy.
+         * @deny (create) If monthlyPointSummaryId does not match the parent.
+         * @principle Multi-level path consistency and relational integrity.
          */
-        match /dailyEntries/{dailyEntryId} {
-          allow get, list: if isOwner(userId);
-          allow create: if isOwner(userId) && request.resource.data.monthlyTimeLogId == monthlyTimeLogId;
-          allow update: if isExistingOwner(userId) && isUnchanged('monthlyTimeLogId');
-          allow delete: if isExistingOwner(userId);
+        match /dailyEntries/{entryId} {
+          allow get, list: if isOwner(userId) || isAdmin();
+          
+          allow create: if (isOwner(userId) || isAdmin()) && request.resource.data.monthlyPointSummaryId == summaryId;
+          allow update: if (isExistingOwner(userId) || isExistingAdmin()) && request.resource.data.monthlyPointSummaryId == resource.data.monthlyPointSummaryId;
+          allow delete: if isExistingAdmin();
         }
       }
-    }
-    
-    // Default deny for any paths not explicitly matched.
-    match /{document=**} {
-      allow read, write: if false;
     }
   }
 }

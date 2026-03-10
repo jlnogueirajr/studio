@@ -1,128 +1,145 @@
-
 {
   "entities": {
-    "Employee": {
+    "UserProfile": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Employee",
+      "title": "UserProfile",
       "type": "object",
-      "description": "Represents an employee whose time records are tracked in the Ponto Ágil application.",
+      "description": "Represents a user of the Ponto Ágil application, storing their unique registration number and initial balance information. This entity does not store passwords, as authentication is handled by an external system for security best practices.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the Employee entity."
+          "description": "Unique identifier for the UserProfile entity."
         },
         "registrationNumber": {
           "type": "string",
-          "description": "The employee's unique registration number."
+          "description": "The employee's unique registration number (matrícula) used to fetch point data."
         },
-        "expectedMonthlyHours": {
-          "type": "number",
-          "description": "Standard monthly hours."
-        },
-        "fixedDsrDays": {
-          "type": "array",
-          "description": "Array of day indices (0-6, where 0 is Sunday) that are fixed DSR/Folga days.",
-          "items": {
-            "type": "number"
-          }
-        },
-        "previousBalance": {
+        "email": {
           "type": "string",
-          "description": "Initial hour balance (HH:MM)."
+          "description": "An email address associated with the user, primarily used for account recovery or communication via an external authentication system.",
+          "format": "email"
         },
-        "previousHolidayBalance": {
+        "initialPreviousMonthBalanceHours": {
           "type": "number",
-          "description": "Initial accumulated holiday credits (days)."
-        },
-        "dailyWorkload": {
-          "type": "number",
-          "description": "Daily workload in minutes."
-        },
-        "holidays": {
-          "type": "array",
-          "items": { "type": "string" }
+          "description": "The manually entered balance of hours from the month prior to the first scraped data, used as a starting point for cumulative balance calculations."
         },
         "createdAt": {
           "type": "string",
+          "description": "Timestamp indicating when the user profile was first created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
+          "description": "Timestamp indicating when the user profile was last updated.",
           "format": "date-time"
+        },
+        "isAdmin": {
+          "type": "boolean",
+          "description": "A flag indicating whether this user has administrative privileges, allowing access to the admin panel functionalities."
         }
       },
       "required": [
         "id",
         "registrationNumber",
-        "expectedMonthlyHours",
+        "initialPreviousMonthBalanceHours",
         "createdAt",
-        "updatedAt"
+        "updatedAt",
+        "isAdmin"
       ]
     },
-    "MonthlyTimeLog": {
+    "MonthlyPointSummary": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "MonthlyTimeLog",
+      "title": "MonthlyPointSummary",
       "type": "object",
-      "description": "Stores the consolidated monthly time tracking data.",
+      "description": "Aggregates the point data and calculated balances for a specific user and month, derived from web scraping.",
       "properties": {
         "id": {
-          "type": "string"
+          "type": "string",
+          "description": "Unique identifier for the MonthlyPointSummary entity."
         },
-        "employeeId": {
-          "type": "string"
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to the UserProfile this monthly summary belongs to. (Relationship: UserProfile 1:N MonthlyPointSummary)"
         },
         "year": {
-          "type": "number"
+          "type": "number",
+          "description": "The year to which this monthly point summary pertains (e.g., 2023)."
         },
         "month": {
-          "type": "number"
+          "type": "number",
+          "description": "The month (1-12) to which this monthly point summary pertains."
         },
-        "fetchedAt": {
+        "totalScrapedHours": {
+          "type": "number",
+          "description": "The total sum of hours worked for this month, as extracted from the external .NET page."
+        },
+        "calculatedMonthlyBalanceHours": {
+          "type": "number",
+          "description": "The calculated balance of hours for this specific month (e.g., totalScrapedHours minus expected hours)."
+        },
+        "cumulativeBalanceHours": {
+          "type": "number",
+          "description": "The running total of hours balance, including the initial previous month's balance and all prior calculated monthly balances up to this month."
+        },
+        "scrapedAt": {
           "type": "string",
+          "description": "Timestamp indicating when this monthly data was last successfully scraped and processed.",
           "format": "date-time"
+        },
+        "rawDataSnapshotUrl": {
+          "type": "string",
+          "description": "An optional URL pointing to a raw data snapshot (e.g., archived HTML or JSON) from the web scraping, useful for auditing or debugging.",
+          "format": "uri"
         }
       },
       "required": [
         "id",
-        "employeeId",
+        "userProfileId",
         "year",
         "month",
-        "fetchedAt"
+        "totalScrapedHours",
+        "calculatedMonthlyBalanceHours",
+        "cumulativeBalanceHours",
+        "scrapedAt"
       ]
     },
-    "DailyEntry": {
+    "DailyPointEntry": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "DailyEntry",
+      "title": "DailyPointEntry",
       "type": "object",
-      "description": "Represents a single day's time tracking record.",
+      "description": "Stores individual daily point entries (clock-in/out times) for a user within a specific month, as extracted from the external source.",
       "properties": {
         "id": {
-          "type": "string"
-        },
-        "monthlyTimeLogId": {
-          "type": "string"
-        },
-        "date": {
           "type": "string",
+          "description": "Unique identifier for the DailyPointEntry entity."
+        },
+        "monthlyPointSummaryId": {
+          "type": "string",
+          "description": "Reference to the MonthlyPointSummary this daily entry belongs to. (Relationship: MonthlyPointSummary 1:N DailyPointEntry)"
+        },
+        "entryDate": {
+          "type": "string",
+          "description": "The specific date for which these point entries were recorded.",
           "format": "date"
         },
-        "times": {
+        "pointTimestamps": {
           "type": "array",
+          "description": "An ordered array of timestamps representing clock-in and clock-out events for the day (e.g., start work, lunch out, lunch in, end work).",
           "items": {
             "type": "string"
           }
         },
-        "isManualDsr": { "type": "boolean" },
-        "isManualWork": { "type": "boolean" },
-        "isHoliday": { "type": "boolean" },
-        "isCompensation": { "type": "boolean" },
-        "isBankOff": { "type": "boolean" }
+        "calculatedDailyHours": {
+          "type": "number",
+          "description": "The total number of hours calculated as worked for this specific day based on the point timestamps."
+        }
       },
       "required": [
         "id",
-        "monthlyTimeLogId",
-        "date",
-        "times"
+        "monthlyPointSummaryId",
+        "entryDate",
+        "pointTimestamps",
+        "calculatedDailyHours"
       ]
     }
   },
@@ -135,35 +152,66 @@
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}/employees/{employeeId}",
+        "path": "/userProfiles/{userId}",
         "definition": {
-          "entityName": "Employee",
+          "entityName": "UserProfile",
           "schema": {
-            "$ref": "#/backend/entities/Employee"
+            "$ref": "#/backend/entities/UserProfile"
           },
-          "description": "Stores employee records."
+          "description": "Root collection for all user profiles. Document IDs correspond to Firebase Authentication UIDs. Includes the 'isAdmin' field for defining administrative roles.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user, corresponding to their Firebase Authentication UID."
+            }
+          ]
         }
       },
       {
-        "path": "/users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}",
+        "path": "/userProfiles/{userId}/monthlySummaries/{monthlySummaryId}",
         "definition": {
-          "entityName": "MonthlyTimeLog",
+          "entityName": "MonthlyPointSummary",
           "schema": {
-            "$ref": "#/backend/entities/MonthlyTimeLog"
+            "$ref": "#/backend/entities/MonthlyPointSummary"
           },
-          "description": "Contains monthly time logs."
+          "description": "Subcollection storing monthly aggregated point data for a specific user. Access is restricted to the owner user or administrators. Includes denormalized 'userProfileId' for authorization independence and data clarity.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the parent user profile."
+            },
+            {
+              "name": "monthlySummaryId",
+              "description": "The unique identifier for the specific monthly point summary."
+            }
+          ]
         }
       },
       {
-        "path": "/users/{userId}/employees/{employeeId}/monthlyTimeLogs/{monthlyTimeLogId}/dailyEntries/{dailyEntryId}",
+        "path": "/userProfiles/{userId}/monthlySummaries/{monthlySummaryId}/dailyEntries/{dailyEntryId}",
         "definition": {
-          "entityName": "DailyEntry",
+          "entityName": "DailyPointEntry",
           "schema": {
-            "$ref": "#/backend/entities/DailyEntry"
+            "$ref": "#/backend/entities/DailyPointEntry"
           },
-          "description": "Stores daily time entries."
+          "description": "Subcollection storing individual daily point entries for a specific monthly summary. Access is restricted to the owner user or administrators. Includes denormalized 'monthlyPointSummaryId' for authorization independence and data clarity.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the grandparent user profile."
+            },
+            {
+              "name": "monthlySummaryId",
+              "description": "The unique identifier of the parent monthly point summary."
+            },
+            {
+              "name": "dailyEntryId",
+              "description": "The unique identifier for the specific daily point entry."
+            }
+          ]
         }
       }
-    ]
+    ],
+    "reasoning": "The recommended Firestore structure is designed to adhere strictly to the core design principles, particularly Authorization Independence, and to facilitate simple, robust, and debuggable security rules. It employs a hierarchical path-based ownership model, starting with a root collection for user profiles and nesting user-specific data within subcollections.\n\n**Authorization Independence:** This is achieved primarily through the use of path-based authorization. For example, a user's monthly summaries are stored at `/userProfiles/{userId}/monthlySummaries/{monthlySummaryId}`. Firestore Security Rules can directly compare `request.auth.uid` with the `{userId}` wildcard in the path to determine ownership without needing to perform a `get()` operation on the parent `/userProfiles/{userId}` document. This allows for atomic operations (like creating a user profile and their first monthly summary in a single batch) without breaking security rules. Additionally, the `MonthlyPointSummary` entity explicitly includes `userProfileId`, and `DailyPointEntry` includes `monthlyPointSummaryId`. While the path already conveys this, these denormalized fields are included to satisfy the mandate that parent attributes affecting access must be copied, enhancing data integrity and query flexibility if an entity ever needed to be accessed without its full hierarchical path (e.g., for data aggregation or specific reports).\n\n**QAPs (Rules are not Filters):** The structural segregation and path-based ownership directly support Query-as-Permission. For a regular user, queries like `db.collection('userProfiles').doc(auth.uid).collection('monthlySummaries').get()` will automatically be secured by rules ensuring `{userId}` matches `request.auth.uid`. The database will only return documents that the user is authorized to see, rather than filtering results post-query. For administrators, the `isAdmin` field on their own `UserProfile` document (`/userProfiles/$(request.auth.uid)`) is checked to grant broader `list` access to the `/userProfiles` collection and its subcollections. This `get()` is acceptable as it's checking the *requesting user's own* role, not a dependency of the data being accessed. This allows admins to efficiently query all user profiles and subsequently query summaries for any specific user without client-side filtering."
   }
 }
