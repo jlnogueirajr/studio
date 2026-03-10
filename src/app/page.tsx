@@ -71,13 +71,13 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const records = logsSnap.docs.map(d => d.data() as DailyRecord);
         
-        // Ordenação Ascendente: Do dia 1 para o dia atual
+        // ORDEM DECRESCENTE: Datas atuais no topo
         const sortedRecords = records.sort((a, b) => {
            const [dayA, monthA, yearA] = a.date.split('/').map(Number);
            const [dayB, monthB, yearB] = b.date.split('/').map(Number);
            const dateA = new Date(yearA, monthA - 1, dayA).getTime();
            const dateB = new Date(yearB, monthB - 1, dayB).getTime();
-           return dateA - dateB;
+           return dateB - dateA;
         });
 
         setEmployeeData({
@@ -119,7 +119,6 @@ export default function Home() {
       const year = now.getFullYear();
       const monthYear = `${year}-${month.toString().padStart(2, '0')}`;
 
-      // Busca todos os dias do mês no portal
       const freshData = await fetchMonthData(m, month, year);
       
       if (freshData.length === 0) {
@@ -165,13 +164,13 @@ export default function Home() {
 
       await batch.commit();
 
-      // Ordenação Ascendente para o estado local
+      // ORDEM DECRESCENTE para o estado local
       const sortedData = freshData.sort((a, b) => {
         const [dayA, monthA, yearA] = a.date.split('/').map(Number);
         const [dayB, monthB, yearB] = b.date.split('/').map(Number);
         const dateA = new Date(yearA, monthA - 1, dayA).getTime();
         const dateB = new Date(yearB, monthB - 1, dayB).getTime();
-        return dateA - dateB;
+        return dateB - dateA;
       });
 
       setEmployeeData({
