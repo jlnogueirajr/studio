@@ -1,37 +1,45 @@
+
 'use server';
 /**
  * Server Action que realiza a consulta COMPLETA do mês no portal.
  * Implementa a lógica de navegação ASP.NET AJAX para percorrer todos os dias.
  */
 
+// Desabilita verificação SSL para o portal interno (hack necessário para ambientes de desenvolvimento)
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 /**
- * Extrai campos ocultos do ASP.NET (ViewState, Validation, etc) de HTML ou Delta AJAX.
+ * Extrai campos ocultos de um HTML completo ou de uma resposta Delta AJAX.
+ * O formato Delta é |length|type|id|content|
  */
 function updateFields(html: string, currentFields: Record<string, string>): Record<string, string> {
   const fields = { ...currentFields };
   
-  // Se for resposta Delta (|length|type|id|content|)
+  // Lógica para respostas AJAX Delta (|length|type|id|content|)
   if (html.includes('|')) {
     const parts = html.split('|');
     for (let i = 0; i < parts.length; i++) {
-      if (parts[i] === 'hiddenField') {
-        const name = parts[i + 1];
-        const value = parts[i + 2];
-        if (name) fields[name] = value;
+      const type = parts[i];
+      const id = parts[i + 1];
+      const content = parts[i + 2];
+      
+      if (type === 'hiddenField' && id) {
+        fields[id] = content;
       }
-      if (['__VIEWSTATE', '__EVENTVALIDATION', '__VIEWSTATEGENERATOR'].includes(parts[i])) {
-        fields[parts[i]] = parts[i + 1];
+      if (['__VIEWSTATE', '__EVENTVALIDATION', '__VIEWSTATEGENERATOR'].includes(id)) {
+        fields[id] = content;
       }
     }
-    return fields;
   }
 
-  // Se for HTML completo
+  // Fallback para HTML completo (primeira carga ou erro de delta)
   const regex = /id="(__\w+)"\s+value="([^"]*)"/g;
   let match;
   while ((match = regex.exec(html)) !== null) {
     fields[match[1]] = match[2];
   }
+  
+  // Garante que campos críticos sejam mantidos
   return fields;
 }
 
@@ -40,20 +48,14 @@ function updateFields(html: string, currentFields: Record<string, string>): Reco
  */
 function extractTimesFromGrid(html: string): string[] {
   const times: string[] = [];
-  // Localiza a parte do HTML que contém o Grid para evitar falsos positivos do cabeçalho
-  const gridStart = html.indexOf('id="Grid"');
-  if (gridStart === -1) return [];
-  
-  const content = html.substring(gridStart);
-  
-  // Regex que busca HH:MM dentro de tags (td, span, etc)
+  // Busca por qualquer horário HH:MM dentro da resposta
   const timeRegex = />\s*([0-2]?\d:[0-5]\d)\s*</g;
   let match;
-  while ((match = timeRegex.exec(content)) !== null) {
+  while ((match = timeRegex.exec(html)) !== null) {
     times.push(match[1]);
   }
   
-  // Remove duplicados e garante formato 00:00
+  // Limpa e formata
   return Array.from(new Set(times)).map(t => {
       const parts = t.split(':');
       return `${parts[0].padStart(2, '0')}:${parts[1]}`;
@@ -83,9 +85,6 @@ function extractCalendarArguments(html: string, targetMonth: number): Record<num
 }
 
 export async function fetchMonthData(matricula: string, month: number, year: number) {
-  // Ignora SSL para o portal interno
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  
   const results: { date: string, times: string[] }[] = [];
   const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
@@ -104,7 +103,7 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     const daysToFetch = Object.keys(calendarArgs).map(Number).sort((a, b) => a - b);
 
     if (daysToFetch.length === 0) {
-      throw new Error("Calendário não localizado. Verifique a matrícula ou o mês.");
+      throw new Error("Calendário não localizado. Verifique a matrícula.");
     }
 
     const today = new Date();
@@ -176,7 +175,7 @@ export async function fetchMonthData(matricula: string, month: number, year: num
 
     return results;
   } catch (error: any) {
-    console.error("Erro na extração completa:", error);
+    console.error("Erro na extração:", error);
     throw new Error(error.message || "Falha ao consultar o portal.");
   }
 }

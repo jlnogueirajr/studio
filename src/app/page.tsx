@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -73,9 +74,11 @@ export default function Home() {
         
         // Ordenação Ascendente: Do dia 1 para o dia atual
         const sortedRecords = records.sort((a, b) => {
-           const dateA = a.date.split('/').reverse().join('');
-           const dateB = b.date.split('/').reverse().join('');
-           return dateA.localeCompare(dateB);
+           const [dayA, monthA, yearA] = a.date.split('/').map(Number);
+           const [dayB, monthB, yearB] = b.date.split('/').map(Number);
+           const dateA = new Date(yearA, monthA - 1, dayA).getTime();
+           const dateB = new Date(yearB, monthB - 1, dayB).getTime();
+           return dateA - dateB;
         });
 
         setEmployeeData({
@@ -119,6 +122,11 @@ export default function Home() {
 
       // Busca todos os dias do mês no portal
       const freshData = await fetchMonthData(m, month, year);
+      
+      if (freshData.length === 0) {
+          throw new Error("Nenhum horário encontrado. Verifique sua matrícula.");
+      }
+
       const batch = writeBatch(firestore);
       
       const empRef = doc(firestore, 'users', user.uid, 'employees', m);
@@ -160,9 +168,11 @@ export default function Home() {
 
       // Ordenação Ascendente para o estado local
       const sortedData = freshData.sort((a, b) => {
-        const dateA = a.date.split('/').reverse().join('');
-        const dateB = b.date.split('/').reverse().join('');
-        return dateA.localeCompare(dateB);
+        const [dayA, monthA, yearA] = a.date.split('/').map(Number);
+        const [dayB, monthB, yearB] = b.date.split('/').map(Number);
+        const dateA = new Date(yearA, monthA - 1, dayA).getTime();
+        const dateB = new Date(yearB, monthB - 1, dayB).getTime();
+        return dateA - dateB;
       });
 
       setEmployeeData({
