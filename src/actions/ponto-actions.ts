@@ -38,7 +38,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
   });
 
   try {
-    // 1. GET inicial para capturar cookies e VIEWSTATE
+    // 1. GET inicial para capturar cookies e tokens
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: {
@@ -65,7 +65,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       body.append(key, value);
     });
     
-    // Configura os disparadores específicos do site (ScriptManager e btnConsultar)
+    // Configura os disparadores específicos do site
     body.set('ScriptManager1', 'UpdatePanel1|btnConsultar');
     body.set('__EVENTTARGET', 'btnConsultar'); 
     body.set('__EVENTARGUMENT', '');
@@ -98,16 +98,15 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     }
 
     // 3. IA processa o HTML resultante
-    const extracted = await robustTimeDataExtraction({
+    return await robustTimeDataExtraction({
       htmlContent,
       matricula,
       month,
       year
     });
 
-    return extracted;
   } catch (error: any) {
-    console.error("Scraping error:", error);
-    throw new Error(error.message || "Erro ao consultar portal.");
+    console.error("Scraping/Extraction error:", error);
+    throw new Error(error.message || "Erro desconhecido ao processar ponto.");
   }
 }

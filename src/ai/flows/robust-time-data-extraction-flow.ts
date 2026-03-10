@@ -23,11 +23,12 @@ export type RobustTimeDataExtractionOutput = z.infer<typeof RobustTimeDataExtrac
 
 const robustTimeDataExtractionPrompt = ai.definePrompt({
   name: 'robustTimeDataExtractionPrompt',
+  model: 'googleai/gemini-1.5-flash',
   input: {schema: RobustTimeDataExtractionInputSchema},
   output: {schema: RobustTimeDataExtractionOutputSchema},
   prompt: `Você é um robô de extração de dados especializado em portais de RH.
 
-Sua tarefa é extrair TODOS os horários de batida de ponto da matrícula '{{{matricula}}}' presentes no HTML.
+Sua tarefa é extrair TODOS os horários de batida de ponto presentes no HTML fornecido.
 
 PROCEDIMENTO:
 1. Localize a tabela com o id="Grid".
@@ -38,12 +39,11 @@ PROCEDIMENTO:
 Exemplo de estrutura no HTML:
 <table id="Grid">
   <tr><th>Horário</th></tr>
-  <tr><td>00:20</td></tr>
-  <tr><td>16:14</td></tr>
-  <tr><td>20:00</td></tr>
+  <tr><td>08:00</td></tr>
+  <tr><td>12:00</td></tr>
+  <tr><td>13:00</td></tr>
+  <tr><td>17:00</td></tr>
 </table>
-
-No exemplo acima, você deve retornar: ["00:20", "16:14", "20:00"]
 
 HTML PARA PROCESSAR:
 {{{htmlContent}}}
@@ -57,8 +57,16 @@ const robustTimeDataExtractionFlow = ai.defineFlow(
     outputSchema: RobustTimeDataExtractionOutputSchema,
   },
   async (input) => {
-    const {output} = await robustTimeDataExtractionPrompt(input);
-    return output!;
+    try {
+      const {output} = await robustTimeDataExtractionPrompt(input);
+      if (!output) {
+        throw new Error('A IA não retornou nenhum dado extraído.');
+      }
+      return output;
+    } catch (error: any) {
+      console.error("Erro na extração IA:", error);
+      throw new Error(`Erro de extração (IA): ${error.message || 'Erro desconhecido'}`);
+    }
   }
 );
 
