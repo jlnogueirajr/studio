@@ -16,6 +16,7 @@ import { Edit2, Info } from "lucide-react";
 import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface DailyRecordsTableProps {
   records: DailyRecord[];
