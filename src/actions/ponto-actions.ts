@@ -5,6 +5,7 @@
  */
 
 import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
+import https from 'https';
 
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
@@ -31,6 +32,11 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
+  // Agente para ignorar erros de SSL (equivalente ao verify=False do Python)
+  const agent = new https.Agent({
+    rejectUnauthorized: false
+  });
+
   try {
     // 1. GET inicial para capturar cookies e VIEWSTATE
     const responseGet = await fetch(TARGET_URL, {
@@ -38,6 +44,8 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
+      // @ts-ignore
+      agent,
       cache: 'no-store'
     });
 
@@ -73,6 +81,8 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
         'Origin': 'https://webapp.confianca.com.br',
         ...(cookies ? { 'Cookie': cookies } : {})
       },
+      // @ts-ignore
+      agent,
       body: body.toString(),
       cache: 'no-store'
     });
@@ -94,10 +104,6 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       month,
       year
     });
-
-    if (!extracted || extracted.dailyRecords.length === 0) {
-      throw new Error("Nenhum registro de ponto encontrado para hoje.");
-    }
 
     return extracted;
   } catch (error: any) {

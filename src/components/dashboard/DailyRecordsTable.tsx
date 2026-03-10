@@ -10,13 +10,11 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { calculateDailyWorkedMinutes, minutesToTime } from "@/lib/ponto-utils";
+import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours } from "@/lib/ponto-utils";
 
 interface DailyRecord {
   date: string;
-  entryTimes: string[];
-  exitTimes: string[];
-  dailyHours: string;
+  times: string[];
 }
 
 interface DailyRecordsTableProps {
@@ -34,36 +32,41 @@ export function DailyRecordsTable({ records }: DailyRecordsTableProps) {
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[120px]">Data</TableHead>
-              <TableHead>Entradas</TableHead>
-              <TableHead>Saídas</TableHead>
+              <TableHead>Horários Registrados</TableHead>
               <TableHead className="text-right">Horas Úteis</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {records.length > 0 ? (
               records.map((record) => {
-                const workedMinutes = calculateDailyWorkedMinutes(record.entryTimes, record.exitTimes);
+                const sorted = sortPontoHours(record.times);
+                // Dividimos em entradas e saídas para o cálculo (Lógica simplificada)
+                const entryTimes = sorted.filter((_, i) => i % 2 === 0);
+                const exitTimes = sorted.filter((_, i) => i % 2 !== 0);
+                
+                const workedMinutes = calculateDailyWorkedMinutes(entryTimes, exitTimes);
                 const formattedHours = minutesToTime(workedMinutes);
+                const isOdd = sorted.length % 2 !== 0;
                 
                 return (
                   <TableRow key={record.date} className="group hover:bg-primary/5">
                     <TableCell className="font-medium">{record.date}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {record.entryTimes.map((time, i) => (
-                          <Badge key={i} variant="secondary" className="bg-secondary/50 text-secondary-foreground">
+                        {sorted.map((time, i) => (
+                          <Badge 
+                            key={i} 
+                            variant={i % 2 === 0 ? "secondary" : "outline"} 
+                            className={i % 2 === 0 ? "bg-secondary/50" : "border-accent"}
+                          >
                             {time}
                           </Badge>
                         ))}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {record.exitTimes.map((time, i) => (
-                          <Badge key={i} variant="outline" className="border-accent text-accent-foreground font-semibold">
-                            {time}
+                        {isOdd && (
+                          <Badge variant="destructive" className="animate-pulse">
+                            Batida Ímpar
                           </Badge>
-                        ))}
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-bold text-primary">
@@ -74,7 +77,7 @@ export function DailyRecordsTable({ records }: DailyRecordsTableProps) {
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
                   Nenhum registro encontrado para este período.
                 </TableCell>
               </TableRow>

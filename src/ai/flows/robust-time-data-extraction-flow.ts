@@ -1,8 +1,7 @@
-
 'use server';
 /**
  * @fileOverview Fluxo Genkit para extração robusta de dados de ponto a partir de HTML.
- * Especializado em portais ASP.NET com tabelas de horários (id="Grid").
+ * Focado na estrutura exata da tabela "Grid" do portal ASP.NET.
  */
 
 import {ai} from '@/ai/genkit';
@@ -16,16 +15,9 @@ const RobustTimeDataExtractionInputSchema = z.object({
 });
 export type RobustTimeDataExtractionInput = z.infer<typeof RobustTimeDataExtractionInputSchema>;
 
-const TimeRecordSchema = z.object({
-  date: z.string().describe('Data em formato DD/MM/YYYY.'),
-  entryTimes: z.array(z.string()).describe('Lista de horários de entrada (HH:MM).'),
-  exitTimes: z.array(z.string()).describe('Lista de horários de saída (HH:MM).'),
-  dailyHours: z.string().describe('Total de horas úteis do dia (HH:MM).'),
-});
-
 const RobustTimeDataExtractionOutputSchema = z.object({
-  employeeId: z.string().describe('Matrícula confirmada.'),
-  dailyRecords: z.array(TimeRecordSchema).describe('Registros diários extraídos.'),
+  matricula: z.string().describe('Matrícula confirmada.'),
+  times: z.array(z.string()).describe('Lista plana de horários encontrados no formato HH:MM.'),
 });
 export type RobustTimeDataExtractionOutput = z.infer<typeof RobustTimeDataExtractionOutputSchema>;
 
@@ -35,19 +27,25 @@ const robustTimeDataExtractionPrompt = ai.definePrompt({
   output: {schema: RobustTimeDataExtractionOutputSchema},
   prompt: `Você é um robô de extração de dados especializado em portais de RH.
 
-Sua tarefa é extrair os horários da matrícula '{{{matricula}}}' do HTML abaixo.
+Sua tarefa é extrair TODOS os horários de batida de ponto da matrícula '{{{matricula}}}' presentes no HTML.
 
 PROCEDIMENTO:
-1. Encontre a tabela com id="Grid".
-2. Cada linha (tr) dessa tabela contém um horário (td) no formato HH:MM.
-3. Exemplo de horários no HTML: 00:20, 16:14, 20:00.
-4. Identifique o dia selecionado no calendário (id="Calendar"). O dia com background-color:#CAD400 é o dia atual. Use a data {{{month}}}/{{{year}}}.
-5. Extraia TODOS os horários da tabela Grid para este dia.
-6. Apenas liste os horários encontrados. Não tente calcular as horas úteis ainda, apenas retorne os horários em entryTimes e exitTimes. 
-7. Se houver 3 horários (ex: 16:14, 20:00, 00:20), coloque os dois primeiros em entryTimes e os dois últimos em exitTimes (se aplicável) ou apenas retorne a lista crua para que o sistema processe. 
-   - Recomendação: Retorne os horários ímpares em entryTimes e os pares em exitTimes na ordem em que aparecem.
+1. Localize a tabela com o id="Grid".
+2. Extraia cada valor de horário (HH:MM) presente nas células (td) dessa tabela.
+3. Ignore o cabeçalho "Horário".
+4. Retorne apenas a lista de horários encontrados, na ordem em que aparecem.
 
-HTML:
+Exemplo de estrutura no HTML:
+<table id="Grid">
+  <tr><th>Horário</th></tr>
+  <tr><td>00:20</td></tr>
+  <tr><td>16:14</td></tr>
+  <tr><td>20:00</td></tr>
+</table>
+
+No exemplo acima, você deve retornar: ["00:20", "16:14", "20:00"]
+
+HTML PARA PROCESSAR:
 {{{htmlContent}}}
 `,
 });

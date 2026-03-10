@@ -3,33 +3,30 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, TrendingUp, CalendarDays } from "lucide-react";
-import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes } from '@/lib/ponto-utils';
+import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours } from '@/lib/ponto-utils';
 
 interface SummaryCardsProps {
   records: Array<{
-    entryTimes: string[];
-    exitTimes: string[];
+    times: string[];
   }>;
   previousBalance: string;
 }
 
 export function SummaryCards({ records, previousBalance }: SummaryCardsProps) {
   const stats = useMemo(() => {
-    if (!records) return { monthTotal: '00:00', monthBalance: '00:00', totalBalance: '00:00', isPositive: true };
+    if (!records || records.length === 0) return { monthTotal: '00:00', monthBalance: '00:00', totalBalance: '00:00', isPositive: true };
 
-    // Calculamos o total trabalhado no mês atual com base nos registros
     const workedMinutes = records.reduce((acc, record) => {
-      return acc + calculateDailyWorkedMinutes(record.entryTimes, record.exitTimes);
+      const sorted = sortPontoHours(record.times);
+      const entryTimes = sorted.filter((_, i) => i % 2 === 0);
+      const exitTimes = sorted.filter((_, i) => i % 2 !== 0);
+      return acc + calculateDailyWorkedMinutes(entryTimes, exitTimes);
     }, 0);
 
-    // Meta diária padrão (07:20)
     const DAILY_GOAL = 7 * 60 + 20;
     const totalGoalMinutes = records.length * DAILY_GOAL;
-
-    // Saldo anterior (convertendo string para minutos)
     const prevBalanceMinutes = timeToMinutes(previousBalance);
     
-    // Saldo do mês = trabalhado - meta
     const monthBalanceMinutes = workedMinutes - totalGoalMinutes;
     const totalBalanceMinutes = monthBalanceMinutes + prevBalanceMinutes;
 

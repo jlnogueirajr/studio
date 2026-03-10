@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -33,7 +32,6 @@ export default function Home() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
 
-  // Garante que o usuário está autenticado anonimamente para cumprir as regras do Firestore
   useEffect(() => {
     if (!isUserLoading && !user && auth) {
       signInAnonymously(auth).catch(console.error);
@@ -54,12 +52,10 @@ export default function Home() {
     localStorage.setItem('last_matricula', m);
 
     try {
-      // O caminho agora segue a regra: /users/{userId}/employees/{matricula}
       const docRef = doc(firestore, 'users', user.uid, 'employees', m);
       const docSnap = await getDoc(docRef);
       const stored = docSnap.exists() ? docSnap.data() as EmployeeData : null;
 
-      // Chama a Server Action para o scraping
       const freshExtracted = await fetchAndExtractPonto(m);
       
       let updated: EmployeeData;
@@ -81,7 +77,6 @@ export default function Home() {
       }
 
       setEmployeeData(updated);
-      // Salva no Firestore usando o caminho autorizado
       await setDoc(docRef, updated, { merge: true });
 
     } catch (error: any) {
@@ -152,6 +147,12 @@ export default function Home() {
     );
   }
 
+  // Mapeia os dados da IA para o formato da tabela
+  const records = employeeData?.extractedData?.times ? [{
+    date: new Date().toLocaleDateString('pt-BR'),
+    times: employeeData.extractedData.times
+  }] : [];
+
   return (
     <main className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-8">
@@ -212,11 +213,11 @@ export default function Home() {
             </div>
 
             <SummaryCards 
-              records={employeeData?.extractedData?.dailyRecords || []} 
+              records={records} 
               previousBalance={employeeData?.previousBalance || '00:00'} 
             />
 
-            <DailyRecordsTable records={employeeData?.extractedData?.dailyRecords || []} />
+            <DailyRecordsTable records={records} />
           </div>
         )}
 
