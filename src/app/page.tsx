@@ -12,7 +12,7 @@ import { AdminPanel } from '@/components/admin/AdminPanel';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { fetchMonthData } from '@/actions/ponto-actions';
 import { Button } from '@/components/ui/button';
-import { RefreshCcw, LogOut, Loader2, Calendar, Settings, Wallet, ShieldCheck } from 'lucide-react';
+import { RefreshCcw, LogOut, Loader2, Calendar, Settings, Wallet, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
@@ -52,6 +52,9 @@ export default function Home() {
   const [matricula, setMatricula] = useState<string | null>(null);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
+  const [viewYear, setViewYear] = useState(new Date().getFullYear());
+  
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
   const [showDsrDialog, setShowDsrDialog] = useState(false);
   const [showCalendarDialog, setShowCalendarDialog] = useState(false);
@@ -65,20 +68,16 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem('logged_matricula');
     if (saved && user && firestore) {
-      loadEmployeeData(saved);
+      setMatricula(saved);
+      loadEmployeeData(saved, viewMonth, viewYear);
     }
-  }, [user, firestore]);
+  }, [user, firestore, viewMonth, viewYear]);
 
-  const loadEmployeeData = async (m: string) => {
+  const loadEmployeeData = async (m: string, month: number, year: number) => {
     if (!firestore || !user) return;
     setIsLoading(true);
-    setMatricula(m);
     try {
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentYear = now.getFullYear();
-      const mYear = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
-      
+      const mYear = `${year}-${month.toString().padStart(2, '0')}`;
       const docRef = doc(firestore, 'userProfiles', m);
       const docSnap = await getDoc(docRef);
       
@@ -88,25 +87,14 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
         
-        let displayYear = currentYear;
-        let displayMonth = currentMonth;
-
-        if (rawRecords.length > 0) {
-          const firstDate = rawRecords[0].date.split('/');
-          if (firstDate.length === 3) {
-            displayMonth = parseInt(firstDate[1]);
-            displayYear = parseInt(firstDate[2]);
-          }
-        }
-
-        const daysInMonth = new Date(displayYear, displayMonth, 0).getDate();
-        const lastDayToRender = (displayMonth === (new Date().getMonth() + 1) && displayYear === new Date().getFullYear()) 
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const lastDayToRender = (month === (new Date().getMonth() + 1) && year === new Date().getFullYear()) 
           ? new Date().getDate() 
           : daysInMonth;
 
         const fullMonthRecords: DailyRecord[] = [];
         for (let d = 1; d <= lastDayToRender; d++) {
-          const dateStr = `${d.toString().padStart(2, '0')}/${displayMonth.toString().padStart(2, '0')}/${displayYear}`;
+          const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
           const existing = rawRecords.find(r => r.date === dateStr);
           if (existing) {
             fullMonthRecords.push(existing);
@@ -144,95 +132,17 @@ export default function Home() {
       }
     } catch (e) { 
       console.error("Erro ao carregar dados:", e);
-      toast({ variant: "destructive", title: "Erro ao carregar dados" }); 
     } finally { 
       setIsLoading(false); 
     }
-  };
-
-  const handleAuth = async (m: string, p: string, isSignUp: boolean) => {
-    if (!auth || !firestore) return;
-    setIsLoading(true);
-
-    try {
-      const docRef = doc(firestore, 'userProfiles', m);
-      const docSnap = await getDoc(docRef);
-      const data = docSnap.data();
-      const version = data?.authVersion || 0;
-      const email = `m${m}_v${version}@pontoagil.com.br`;
-
-      let userCredential: UserCredential;
-
-      if (isSignUp) {
-        try {
-          userCredential = await createUserWithEmailAndPassword(auth, email, p);
-        } catch (e: any) {
-          if (e.code === 'auth/email-already-in-use') {
-            userCredential = await signInWithEmailAndPassword(auth, email, p);
-          } else {
-            throw e;
-          }
-        }
-
-        const now = new Date().toISOString();
-        const isAdminUser = m === '000000';
-        
-        const profileUpdate: any = {
-          uid: userCredential.user.uid,
-          updatedAt: now,
-          registrationNumber: m,
-          id: m,
-          isAdmin: isAdminUser,
-          authVersion: version
-        };
-
-        if (!docSnap.exists()) {
-          profileUpdate.createdAt = now;
-          profileUpdate.previousBalance = '00:00';
-          profileUpdate.previousHolidayBalance = 0;
-          profileUpdate.fixedDsrDays = [0];
-          profileUpdate.dailyWorkload = 440;
-          profileUpdate.holidays = [];
-        }
-
-        await setDoc(docRef, profileUpdate, { merge: true });
-      } else {
-        userCredential = await signInWithEmailAndPassword(auth, email, p);
-      }
-      
-      localStorage.setItem('logged_matricula', m);
-      await loadEmployeeData(m);
-      toast({ title: isSignUp ? "Acesso configurado!" : "Login realizado!" });
-    } catch (e: any) {
-      console.error("Erro Auth:", e);
-      let errorMsg = "Ocorreu um erro. Verifique sua conexão.";
-      if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
-        errorMsg = "Senha incorreta.";
-      } else if (e.code === 'auth/weak-password') {
-        errorMsg = "A senha deve ter no mínimo 6 caracteres.";
-      }
-      toast({ variant: "destructive", title: "Erro de Acesso", description: errorMsg });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (!auth) return;
-    await signOut(auth);
-    localStorage.removeItem('logged_matricula');
-    setMatricula(null);
-    setEmployeeData(null);
-    setShowAdminPanel(false);
   };
 
   const handleSyncPortal = async () => {
     if (!matricula || !firestore || !user) return;
     setIsLoading(true);
     try {
-      const now = new Date();
-      const mYear = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
-      const freshData = await fetchMonthData(matricula, now.getMonth() + 1, now.getFullYear());
+      const freshData = await fetchMonthData(matricula, viewMonth, viewYear);
+      const mYear = `${viewYear}-${viewMonth.toString().padStart(2, '0')}`;
       
       const normalizedData = normalizeNightShifts(freshData.map(d => ({ ...d, times: [...d.times] })));
       const batch = writeBatch(firestore);
@@ -241,8 +151,8 @@ export default function Home() {
       batch.set(summaryRef, { 
         id: mYear, 
         userProfileId: matricula, 
-        year: now.getFullYear(), 
-        month: now.getMonth() + 1,
+        year: viewYear, 
+        month: viewMonth,
         scrapedAt: new Date().toISOString(),
       }, { merge: true });
 
@@ -257,13 +167,22 @@ export default function Home() {
       });
 
       await batch.commit();
-      await loadEmployeeData(matricula);
+      await loadEmployeeData(matricula, viewMonth, viewYear);
       toast({ title: "Portal sincronizado!" });
     } catch (e: any) {
       toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const changeMonth = (dir: number) => {
+    let newMonth = viewMonth + dir;
+    let newYear = viewYear;
+    if (newMonth > 12) { newMonth = 1; newYear++; }
+    if (newMonth < 1) { newMonth = 12; newYear--; }
+    setViewMonth(newMonth);
+    setViewYear(newYear);
   };
 
   if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
@@ -293,34 +212,66 @@ export default function Home() {
                   <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-card border-primary/30 font-black"><Settings className="w-4 h-4 mr-2" /> ESCALA</Button>
                 </>
               )}
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="font-bold text-destructive hover:bg-destructive/10"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
+              <Button variant="ghost" size="sm" onClick={async () => {
+                await signOut(auth!);
+                localStorage.removeItem('logged_matricula');
+                setMatricula(null);
+                setEmployeeData(null);
+              }} className="font-bold text-destructive hover:bg-destructive/10"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
             </div>
           )}
         </header>
 
         {!matricula ? (
           <div className="py-20">
-            <MatriculaInput onLogin={handleAuth} isLoading={isLoading} />
+            <MatriculaInput onLogin={async (m, p, isSignUp) => {
+              try {
+                const version = (await getDoc(doc(firestore!, 'userProfiles', m))).data()?.authVersion || 0;
+                const email = `m${m}_v${version}@pontoagil.com.br`;
+                let cred;
+                if (isSignUp) cred = await createUserWithEmailAndPassword(auth!, email, p);
+                else cred = await signInWithEmailAndPassword(auth!, email, p);
+                
+                await setDoc(doc(firestore!, 'userProfiles', m), {
+                  uid: cred.user.uid,
+                  registrationNumber: m,
+                  updatedAt: new Date().toISOString(),
+                  isAdmin: m === '000000'
+                }, { merge: true });
+                
+                localStorage.setItem('logged_matricula', m);
+                setMatricula(m);
+                loadEmployeeData(m, viewMonth, viewYear);
+              } catch (e: any) {
+                toast({ variant: "destructive", title: "Erro", description: e.message });
+              }
+            }} isLoading={isLoading} />
           </div>
         ) : showAdminPanel ? (
-          <AdminPanel onRefresh={fetchUsers => fetchUsers()} />
-        ) : isLoading ? (
-          <div className="py-20 flex flex-col items-center justify-center gap-6">
-            <RefreshCcw className="w-16 h-16 text-primary animate-spin" />
-            <h2 className="text-2xl font-black text-foreground uppercase animate-pulse">Consultando Portal...</h2>
-          </div>
+          <AdminPanel />
         ) : (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-primary/10 p-2 rounded-lg">
-                  <ShieldCheck className="text-primary w-6 h-6" />
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-card p-6 rounded-2xl border border-border shadow-md">
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 bg-muted p-1 rounded-xl border">
+                  <Button variant="ghost" size="icon" onClick={() => changeMonth(-1)}><ChevronLeft /></Button>
+                  <div className="min-w-[150px] text-center font-black uppercase text-sm">
+                    {new Date(viewYear, viewMonth - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={() => changeMonth(1)}><ChevronRight /></Button>
                 </div>
-                <h2 className="text-2xl font-black text-foreground">MATRÍCULA <span className="text-primary tracking-widest">#{matricula}</span></h2>
               </div>
-              <Button onClick={handleSyncPortal} variant="default" size="lg" className="shadow-xl font-black bg-primary px-8 transform transition hover:scale-105 active:scale-95">
-                <RefreshCcw className="w-5 h-5 mr-3" /> ATUALIZAR DADOS
-              </Button>
+
+              <div className="flex items-center gap-4">
+                <div className="hidden md:block text-right">
+                  <p className="text-[10px] font-black text-muted-foreground uppercase">Colaborador</p>
+                  <h2 className="text-xl font-black text-foreground">#{matricula}</h2>
+                </div>
+                <Button onClick={handleSyncPortal} disabled={isLoading} variant="default" className="shadow-xl font-black bg-primary transform transition hover:scale-105">
+                  {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <RefreshCcw className="w-5 h-5 mr-3" />}
+                  ATUALIZAR DADOS
+                </Button>
+              </div>
             </div>
 
             <SummaryCards 
@@ -349,15 +300,10 @@ export default function Home() {
           currentBalance={employeeData?.previousBalance}
           currentHolidayBalance={employeeData?.previousHolidayBalance}
           onSave={async (b, hb) => {
-            if (matricula && firestore && user) {
-              await setDoc(doc(firestore, 'userProfiles', matricula), { 
-                previousBalance: b, 
-                previousHolidayBalance: hb,
-                updatedAt: new Date().toISOString()
-              }, { merge: true });
+            if (matricula && firestore) {
+              await setDoc(doc(firestore, 'userProfiles', matricula), { previousBalance: b, previousHolidayBalance: hb }, { merge: true });
               setShowBalanceDialog(false);
-              loadEmployeeData(matricula);
-              toast({ title: "Saldos atualizados!" });
+              loadEmployeeData(matricula, viewMonth, viewYear);
             }
           }} onClose={() => setShowBalanceDialog(false)} />
         
@@ -368,17 +314,12 @@ export default function Home() {
           dailyWorkload={employeeData?.dailyWorkload || 440}
           holidays={employeeData?.holidays || []}
           onSave={async (days, refSun, workload, hdays) => {
-            if (matricula && firestore && user) {
+            if (matricula && firestore) {
               await setDoc(doc(firestore, 'userProfiles', matricula), { 
-                fixedDsrDays: days, 
-                referenceDsrSunday: refSun, 
-                dailyWorkload: workload, 
-                holidays: hdays,
-                updatedAt: new Date().toISOString()
+                fixedDsrDays: days, referenceDsrSunday: refSun, dailyWorkload: workload, holidays: hdays 
               }, { merge: true });
-              setEmployeeData({ ...employeeData!, fixedDsrDays: days, referenceDsrSunday: refSun, dailyWorkload: workload, holidays: hdays });
               setShowDsrDialog(false);
-              toast({ title: "Escala salva!" });
+              loadEmployeeData(matricula, viewMonth, viewYear);
             }
           }} onClose={() => setShowDsrDialog(false)} 
         />
@@ -390,25 +331,19 @@ export default function Home() {
           onClose={() => setShowCalendarDialog(false)}
         />
 
-        {editingRecord && matricula && (
+        {editingRecord && (
           <EditTimesDialog 
             isOpen={!!editingRecord} record={editingRecord}
-            onSave={async (times, options) => {
-              if (firestore && user) {
+            onSave={async (times, opts) => {
+              if (firestore && matricula) {
                 const [d, m, y] = editingRecord.date.split('/').map(Number);
-                const recordMonthYear = `${y}-${m.toString().padStart(2, '0')}`;
+                const pathId = `${y}-${m.toString().padStart(2, '0')}`;
                 const dayId = editingRecord.date.replace(/\//g, '-');
-                const dayRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', recordMonthYear, 'dailyEntries', dayId);
-                
-                await setDoc(dayRef, { 
-                  times, 
-                  date: editingRecord.date,
-                  ...options 
+                await setDoc(doc(firestore, 'userProfiles', matricula, 'monthlySummaries', pathId, 'dailyEntries', dayId), {
+                  times, date: editingRecord.date, ...opts
                 }, { merge: true });
-                
-                await loadEmployeeData(matricula);
                 setEditingRecord(null);
-                toast({ title: "Ajuste manual salvo!" });
+                loadEmployeeData(matricula, viewMonth, viewYear);
               }
             }} onClose={() => setEditingRecord(null)} 
           />

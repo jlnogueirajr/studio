@@ -48,23 +48,18 @@ export function SummaryCards({
       
       totalWorkedMinutes += dailyWorked;
 
-      let goalForDay = dailyWorkload;
       const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
-
-      if (record.isManualWork) {
-        goalForDay = dailyWorkload;
-      } else if (isManualFolga || calendarDsr) {
-        goalForDay = 0;
-      } else if (record.isHoliday || calendarHoliday) {
-        if (dailyWorked > 0) {
-          goalForDay = dailyWorkload;
-          holidayCredits++;
-        } else {
-          goalForDay = 0;
-        }
-      }
+      const isSystemFolga = calendarDsr || calendarHoliday || record.isHoliday;
+      
+      // Se for folga (manual ou sistema) e não for trabalho forçado, meta é 0
+      const isMetaZero = (isManualFolga || isSystemFolga) && !record.isManualWork;
+      
+      let goalForDay = isMetaZero ? 0 : dailyWorkload;
 
       totalGoalMinutes += goalForDay;
+      
+      // Contabilidade de feriados para o Card de Folgas
+      if ((calendarHoliday || record.isHoliday) && dailyWorked > 0) holidayCredits++;
       if (record.isCompensation) holidayUsed++;
     });
 

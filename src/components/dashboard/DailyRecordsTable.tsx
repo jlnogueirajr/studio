@@ -48,16 +48,16 @@ export function DailyRecordsTable({
                 <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none shadow-xl">
                   <p className="font-bold text-xs">Regras de Cálculo:</p>
                   <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px] font-medium">
-                    <li>Hora Noturna: Ganho de 1.1428x entre 22h e 05h (Adicional Noturno).</li>
-                    <li>Trabalho em Feriado: Meta do dia + 1 Folga de Crédito.</li>
-                    <li>Saldos: Verde (Extra), Vermelho (Débito).</li>
+                    <li>Hora Noturna: Ganho de 1.1428x entre 22h e 05h.</li>
+                    <li>Meta Zero: Dias marcados como Folga, DSR ou Feriado não descontam saldo.</li>
+                    <li>Trabalho em Feriado/DSR: Todo o tempo trabalhado vira crédito extra.</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
-          <span className="text-[10px] font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-            {records.length} REGISTROS
+          <span className="text-[10px] font-black text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 uppercase">
+            {records.length} Dias Exibidos
           </span>
         </CardTitle>
       </CardHeader>
@@ -80,8 +80,10 @@ export function DailyRecordsTable({
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
+                // Prioridade absoluta para marcações manuais de folga
                 const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
-                const isMetaZeroDay = (isManualFolga || calendarDsr || calendarHoliday || record.isHoliday) && !record.isManualWork;
+                const isSystemFolga = calendarDsr || calendarHoliday || record.isHoliday;
+                const isMetaZeroDay = (isManualFolga || isSystemFolga) && !record.isManualWork;
 
                 const sorted = sortPontoHours(record.times);
                 const { total: workedMinutes, nightBonus } = calculateDetailedWork(
@@ -89,15 +91,8 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                let goalForDay = dailyWorkload;
-                if (record.isManualWork) {
-                  goalForDay = dailyWorkload;
-                } else if (isManualFolga || calendarDsr) {
-                  goalForDay = 0;
-                } else if (record.isHoliday || calendarHoliday) {
-                  goalForDay = workedMinutes > 0 ? dailyWorkload : 0;
-                }
-
+                // Se é meta zero, a meta é 0. Caso contrário, é a carga diária.
+                const goalForDay = isMetaZeroDay ? 0 : dailyWorkload;
                 const dailyBalance = workedMinutes - goalForDay;
                 const isNoTime = !record.times || record.times.length === 0;
 
@@ -149,30 +144,8 @@ export function DailyRecordsTable({
                                 {time}
                               </Badge>
                             ))}
-                            {nightBonus > 0 && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <Moon className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="text-[10px] font-bold">Bônus Noturno Aplicado (+{minutesToTime(nightBonus)})</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                            {(record.isHoliday || calendarHoliday) && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger>
-                                    <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="text-[10px] font-bold">Feriado Trabalhado (+1 Crédito)</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
+                            {nightBonus > 0 && <Moon className="w-3.5 h-3.5 text-blue-500 ml-1" />}
+                            {isMetaZeroDay && <Star className="w-3 h-3 text-amber-500 fill-amber-500 ml-1" />}
                           </>
                         )}
                       </div>
@@ -206,7 +179,7 @@ export function DailyRecordsTable({
             ) : (
               <TableRow>
                 <TableCell colSpan={5} className="h-32 text-center text-muted-foreground font-black uppercase text-xs">
-                  Sincronize com o Portal para ver os dados...
+                  Nenhum dado encontrado para este mês...
                 </TableCell>
               </TableRow>
             )}
