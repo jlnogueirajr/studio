@@ -102,14 +102,14 @@ export default function Home() {
           referenceDsrSunday: base.referenceDsrSunday || null,
           previousHolidayBalance: base.previousHolidayBalance || 0,
           previousBalance: base.previousBalance || '00:00',
-          isAdmin: base.isAdmin || false,
+          isAdmin: base.isAdmin || m === '000000',
           uid: base.uid,
           authVersion: base.authVersion || 0
         } as EmployeeData);
       }
     } catch (e) { 
       console.error("Erro ao carregar dados:", e);
-      toast({ variant: "destructive", title: "Erro ao carregar dados do banco" }); 
+      toast({ variant: "destructive", title: "Erro ao carregar dados" }); 
     } finally { 
       setIsLoading(false); 
     }
@@ -132,7 +132,6 @@ export default function Home() {
         try {
           userCredential = await createUserWithEmailAndPassword(auth, email, p);
         } catch (e: any) {
-          // Fallback: Se o e-mail já existe (erro de rede anterior ou reset parcial), tenta logar
           if (e.code === 'auth/email-already-in-use') {
             userCredential = await signInWithEmailAndPassword(auth, email, p);
           } else {
@@ -141,52 +140,43 @@ export default function Home() {
         }
 
         const now = new Date().toISOString();
-        const isAdmin = m === '000000';
+        const isAdminUser = m === '000000';
         
-        const profile = {
-          id: m,
-          registrationNumber: m,
-          email: email,
+        const profileUpdate: any = {
           uid: userCredential.user.uid,
           updatedAt: now,
-          authVersion: version,
-          isAdmin: isAdmin,
-          ...( !docSnap.exists() ? {
-            createdAt: now,
-            previousBalance: '00:00',
-            previousHolidayBalance: 0,
-            fixedDsrDays: [0],
-            dailyWorkload: 440,
-            holidays: []
-          } : {} )
+          registrationNumber: m,
+          id: m,
+          isAdmin: isAdminUser,
+          authVersion: version
         };
-        await setDoc(docRef, profile, { merge: true });
+
+        if (!docSnap.exists()) {
+          profileUpdate.createdAt = now;
+          profileUpdate.previousBalance = '00:00';
+          profileUpdate.previousHolidayBalance = 0;
+          profileUpdate.fixedDsrDays = [0];
+          profileUpdate.dailyWorkload = 440;
+          profileUpdate.holidays = [];
+        }
+
+        await setDoc(docRef, profileUpdate, { merge: true });
       } else {
-        await signInWithEmailAndPassword(auth, email, p);
+        userCredential = await signInWithEmailAndPassword(auth, email, p);
       }
       
       localStorage.setItem('logged_matricula', m);
       await loadEmployeeData(m);
-      toast({ title: isSignUp ? "Conta configurada com sucesso!" : "Login realizado com sucesso!" });
+      toast({ title: isSignUp ? "Acesso configurado!" : "Login realizado!" });
     } catch (e: any) {
       console.error("Erro Auth:", e);
-      let errorMsg = "Tente novamente mais tarde.";
-      
+      let errorMsg = "Ocorreu um erro. Verifique sua conexão.";
       if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
         errorMsg = "Senha incorreta.";
-      } else if (e.code === 'auth/invalid-email') {
-        errorMsg = "Formato de matrícula ou e-mail inválido.";
-      } else if (e.code === 'auth/email-already-in-use') {
-        errorMsg = "Esta matrícula já possui uma conta. Tente logar ou contate o administrador.";
       } else if (e.code === 'auth/weak-password') {
         errorMsg = "A senha deve ter no mínimo 6 caracteres.";
       }
-
-      toast({ 
-        variant: "destructive", 
-        title: "Erro de Autenticação", 
-        description: errorMsg
-      });
+      toast({ variant: "destructive", title: "Erro de Acesso", description: errorMsg });
     } finally {
       setIsLoading(false);
     }

@@ -1,47 +1,38 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Funções Auxiliares ---
-
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Verifica se o usuário é o dono do perfil baseado no campo 'uid' guardado no documento
-    function isProfileOwner(matricula) {
-      return isSignedIn() && (
-        get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid ||
-        request.auth.uid == get(/databases/$(database)/documents/userProfiles/000000).data.uid
-      );
-    }
-
-    // Permite que o admin (000000) acesse tudo
-    function isAdmin() {
-      return isSignedIn() && get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid;
-    }
-
-    // --- Regras de Coleção ---
-
     match /userProfiles/{matricula} {
-      // Necessário para o componente de login verificar se a matrícula existe
-      allow get: if true; 
-      
-      // Apenas o próprio usuário (ou admin) pode listar ou ler detalhes após logado
+      // Permite verificar se a matrícula existe antes do login
+      allow get: if true;
       allow list: if isSignedIn();
       
-      // Criação permitida se for o primeiro acesso (sem UID ainda) ou se for o próprio
-      allow create: if true; 
+      // Permite criação inicial
+      allow create: if true;
       
-      // Atualização permitida para o dono ou admin
-      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+      // Permite atualizar se for o dono vinculando o UID ou se for o admin 000000
+      allow update: if isSignedIn() && (
+        !('uid' in resource.data) || 
+        resource.data.uid == request.auth.uid || 
+        get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid
+      );
+      
+      allow delete: if isSignedIn() && get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid;
 
-      // Subcoleções de histórico e entradas diárias
       match /monthlySummaries/{summaryId} {
-        allow read, write: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid);
+        allow read, write: if isSignedIn() && (
+          get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid ||
+          get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid
+        );
         
         match /dailyEntries/{entryId} {
-          allow read, write: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid);
+          allow read, write: if isSignedIn() && (
+            get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid ||
+            get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid
+          );
         }
       }
     }
