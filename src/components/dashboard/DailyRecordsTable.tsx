@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2, Info, Star, Landmark, Moon, Coffee, AlertCircle } from "lucide-react";
+import { Edit2, Info, Star, Landmark, Moon, Coffee, AlertCircle, Clock } from "lucide-react";
 import { calculateDetailedWork, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -34,6 +34,8 @@ export function DailyRecordsTable({
   holidays,
   onEdit 
 }: DailyRecordsTableProps) {
+  const todayStr = new Date().toLocaleDateString('pt-BR');
+
   return (
     <Card className="shadow-2xl border-border overflow-hidden bg-card">
       <CardHeader className="bg-muted/50 border-b border-border py-4">
@@ -52,6 +54,7 @@ export function DailyRecordsTable({
                     <li>Em Folgas/DSR/Feriados sem batidas, o saldo é 0.</li>
                     <li>Se trabalhar na Folga/Feriado, a meta é 0 e tudo vira Extra.</li>
                     <li>🌙 Indica bônus noturno já somado ao total.</li>
+                    <li>Hoje: O saldo de hoje não conta no banco até amanhã.</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
@@ -78,6 +81,7 @@ export function DailyRecordsTable({
               records.map((record) => {
                 const [day, month, year] = record.date.split('/').map(Number);
                 const dateObj = new Date(year, month - 1, day);
+                const isToday = record.date === todayStr;
                 
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
@@ -85,7 +89,6 @@ export function DailyRecordsTable({
                 const isSystemHoliday = calendarHoliday || record.isHoliday;
                 const isSystemDsr = calendarDsr;
                 
-                // Meta zero se for folga manual, feriado ou DSR E NÃO houver marcação de "Forçar Trabalho"
                 const isMetaZeroDay = (isManualFolga || isSystemHoliday || isSystemDsr) && !record.isManualWork;
 
                 const sorted = sortPontoHours(record.times);
@@ -94,17 +97,22 @@ export function DailyRecordsTable({
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
                 
-                // Se trabalhou e NÃO está marcado como meta zero, meta é a carga normal
-                // Se for meta zero (folga/feriado), a meta é 0 (tudo é extra)
                 const goalForDay = isMetaZeroDay ? 0 : dailyWorkload;
-                const dailyBalance = workedMinutes > 0 || isMetaZeroDay ? workedMinutes - goalForDay : -dailyWorkload;
+                // Para o dia de hoje, se não terminou, mostra saldo zero para não afetar o banco visualmente
+                const dailyBalance = (isToday && workedMinutes < goalForDay) ? 0 : (workedMinutes > 0 || isMetaZeroDay ? workedMinutes - goalForDay : -dailyWorkload);
                 
                 const isNoTime = !record.times || record.times.length === 0;
 
                 return (
-                  <TableRow key={record.id} className="group hover:bg-accent/30 transition-colors border-border">
+                  <TableRow key={record.id} className={cn(
+                    "group hover:bg-accent/30 transition-colors border-border",
+                    isToday && "bg-primary/5"
+                  )}>
                     <TableCell className="font-black text-foreground border-r py-3">
-                      <div className="text-sm">{record.date}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">{record.date}</span>
+                        {isToday && <Badge variant="secondary" className="text-[8px] h-4 px-1 bg-primary text-primary-foreground font-black">HOJE</Badge>}
+                      </div>
                       <div className={cn(
                         "text-[9px] font-black p-0.5 rounded inline-block uppercase",
                         isMetaZeroDay ? "text-green-700 bg-green-500/10 dark:text-green-400" : "text-primary bg-primary/10"
@@ -132,6 +140,8 @@ export function DailyRecordsTable({
                               <><Coffee className="w-3 h-3" /> Compensação</>
                             ) : isSystemDsr ? (
                               "DSR / Folga"
+                            ) : isToday ? (
+                              <><Clock className="w-3 h-3 animate-pulse" /> Em andamento...</>
                             ) : "Falta / Débito"}
                           </Badge>
                         ) : (
@@ -157,16 +167,18 @@ export function DailyRecordsTable({
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-black text-foreground text-base tabular-nums">
-                      {workedMinutes > 0 ? minutesToTime(workedMinutes) : "---"}
+                      {workedMinutes > 0 ? minutesToTime(workedMinutes) : (isToday && !isNoTime ? "Em curso" : "---")}
                     </TableCell>
                     <TableCell className="text-right font-black text-base tabular-nums border-l bg-primary/5">
                       <span className={cn(
                         "px-2 py-0.5 rounded",
-                        dailyBalance >= 0 
-                          ? "text-green-700 bg-green-500/10 dark:text-green-400" 
-                          : "text-red-700 bg-red-500/10 dark:text-red-400"
+                        isToday && dailyBalance === 0 ? "text-muted-foreground bg-muted" : (
+                          dailyBalance >= 0 
+                            ? "text-green-700 bg-green-500/10 dark:text-green-400" 
+                            : "text-red-700 bg-red-500/10 dark:text-red-400"
+                        )
                       )}>
-                        {minutesToTime(dailyBalance, true)}
+                        {isToday && dailyBalance === 0 ? "--:--" : minutesToTime(dailyBalance, true)}
                       </span>
                     </TableCell>
                     <TableCell className="text-center">

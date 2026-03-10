@@ -34,7 +34,12 @@ export function SummaryCards({
     let holidayCredits = 0;
     let holidayUsed = 0;
 
+    const todayStr = new Date().toLocaleDateString('pt-BR');
+
     records.forEach(record => {
+      // Regra: Não calcula o saldo do dia atual para não afetar o banco de horas enquanto o usuário trabalha
+      if (record.date === todayStr) return;
+
       const [day, month, year] = record.date.split('/').map(Number);
       const dateObj = new Date(year, month - 1, day);
 
@@ -52,7 +57,6 @@ export function SummaryCards({
       
       const isMetaZero = (isManualFolga || isSystemHoliday || isSystemDsr) && !record.isManualWork;
       
-      // Se houve trabalho ou não é meta zero, conta meta. Se não trabalhou nada e é dia útil, meta cheia.
       const goalForDay = isMetaZero ? 0 : dailyWorkload;
 
       if (dailyWorked > 0 || !isMetaZero) {
