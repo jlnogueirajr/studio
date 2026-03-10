@@ -3,43 +3,102 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * PONTO ÁGIL - FIRESTORE SECURITY RULES
-     * Ajustado para permitir a verificação de existência de perfil antes do login.
+     * FIREBASE SECURITY RULES DOCUMENTATION
+     *
+     * Core Philosophy: 
+     * This ruleset implements a strict User-Ownership model. Access control is determined 
+     * by the document's location within the hierarchy, specifically the {userId} prefix.
+     *
+     * Data Structure:
+     * All application data is strictly nested under /users/{userId}/. This includes:
+     * - Employees: /users/{userId}/employees/{employeeId}
+     * - Time Records: /users/{userId}/employees/{employeeId}/monthlyTimeRecords/{monthlyTimeRecordId}
+     * - Balances: /users/{userId}/employees/{employeeId}/monthlyBalances/{monthlyBalanceId}
+     *
+     * Key Security Decisions:
+     * 1. Authorization Independence: By including the owner's UID in the document path, we 
+     *    eliminate the need for cross-document lookups (get() calls), ensuring high 
+     *    performance and lower costs.
+     * 2. Private by Default: No data is publicly readable or listable. Only the authenticated 
+     *    owner of a path can access the data within it.
+     * 3. Relational Integrity: On creation, we enforce that internal document IDs match the 
+     *    Firestore document ID to maintain data consistency.
+     * 4. Immutability: Critical identification fields (like IDs) are marked as immutable 
+     *    after creation to prevent accidental or malicious data corruption.
+     *
+     * Denormalization for Authorization:
+     * The {userId} in the path serves as the primary authorization token. The system 
+     * assumes that any data found within a user's path belongs to that user.
      */
 
+    // --- Helper Functions ---
+
+    /** @description Checks if the request is from a signed-in user. */
     function isSignedIn() {
       return request.auth != null;
     }
 
+    /** @description Checks if the signed-in user matches the provided userId. */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return isSignedIn() && 
-        get(/databases/$(database)/documents/userProfiles/$(request.auth.uid)).data.isAdmin == true;
+    /** @description Checks ownership and ensures the document already exists for updates/deletes. */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
     }
 
-    match /userProfiles/{userId} {
-      // Permite 'get' público para que a tela de login verifique se a matrícula existe.
-      // 'list' continua restrito a administradores.
-      allow get: if true;
-      allow list: if isAdmin();
-      
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
-      allow update: if (isOwner(userId) || isAdmin());
-      allow delete: if isAdmin();
+    /** @description Validates that the internal ID matches the document path ID on creation. */
+    function isValidInternalId(internalId, pathId) {
+      return internalId == pathId;
+    }
 
-      match /monthlySummaries/{summaryId} {
-        allow get, list: if isOwner(userId) || isAdmin();
-        allow create, update: if isOwner(userId) || isAdmin();
-        allow delete: if isAdmin();
+    /** @description Ensures that the internal ID cannot be changed during an update. */
+    function isIdImmutable() {
+      return request.resource.data.id == resource.data.id;
+    }
 
-        match /dailyEntries/{entryId} {
-          allow get, list: if isOwner(userId) || isAdmin();
-          allow create, update: if isOwner(userId) || isAdmin();
-          allow delete: if isAdmin();
-        }
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for the Employee collection. Restricts access to the owning user.
+     * @path /users/{userId}/employees/{employeeId}
+     * @allow Authenticated user (ABC) to (create) a document at /users/ABC/employees/EMP1.
+     * @deny Authenticated user (XYZ) to (list) documents at /users/ABC/employees.
+     * @principle Restricts access to a user's own data tree and validates path consistency.
+     */
+    match /users/{userId}/employees/{employeeId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidInternalId(request.resource.data.id, employeeId);
+      allow update: if isExistingOwner(userId) && isIdImmutable();
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for MonthlyTimeRecords. Nested subcollection of Employees.
+       * @path /users/{userId}/employees/{employeeId}/monthlyTimeRecords/{recordId}
+       * @allow User (ABC) to (get) a record for an employee they manage.
+       * @deny User (ABC) to (update) a record belonging to User (XYZ).
+       * @principle Inherited ownership through path hierarchy.
+       */
+      match /monthlyTimeRecords/{recordId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidInternalId(request.resource.data.id, recordId);
+        allow update: if isExistingOwner(userId) && isIdImmutable();
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for MonthlyBalances. Nested subcollection of Employees.
+       * @path /users/{userId}/employees/{employeeId}/monthlyBalances/{balanceId}
+       * @allow User (ABC) to (list) balances for their own employee.
+       * @deny User (ABC) to (delete) a balance record belonging to User (XYZ).
+       * @principle Enforces document ownership for writes and secure querying.
+       */
+      match /monthlyBalances/{balanceId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidInternalId(request.resource.data.id, balanceId);
+        allow update: if isExistingOwner(userId) && isIdImmutable();
+        allow delete: if isExistingOwner(userId);
       }
     }
   }
