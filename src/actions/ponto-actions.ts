@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * Server Action que realiza a consulta COMPLETA do mês no portal.
