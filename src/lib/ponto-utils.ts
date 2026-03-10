@@ -1,3 +1,4 @@
+
 /**
  * Utilitários para cálculo de horas de ponto, seguindo a lógica do PontoBot.
  * Inclui fator de redução de hora noturna (52.5 min = 60 min) para o período entre 22:00 e 05:00.
@@ -21,19 +22,43 @@ export function minutesToTime(totalMinutes: number, showSign = false): string {
 }
 
 /**
+ * Ordena horários seguindo a lógica do PontoBot:
+ * Horários normais (>= 05:00) vêm primeiro, seguidos pelos da madrugada (< 05:00).
+ */
+export function sortPontoHours(hours: string[]): string[] {
+  if (!hours || hours.length === 0) return [];
+  
+  const norm = hours.filter(h => {
+    const [hrs] = h.split(':').map(Number);
+    return hrs >= 5;
+  }).sort();
+  
+  const mad = hours.filter(h => {
+    const [hrs] = h.split(':').map(Number);
+    return hrs < 5;
+  }).sort();
+  
+  return [...norm, ...mad];
+}
+
+/**
  * Calcula os minutos trabalhados no dia com o fator noturno (1.1428x entre 22h e 05h).
  */
 export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: string[]): number {
   let totalWorked = 0;
   const NIGHT_FACTOR = 60 / 52.5; // Aproximadamente 1.142857
 
-  const pairsCount = Math.min(entryTimes.length, exitTimes.length);
+  // Usamos a lógica de ordenação especial antes de parear
+  const sortedEntries = sortPontoHours(entryTimes);
+  const sortedExits = sortPontoHours(exitTimes);
+
+  const pairsCount = Math.min(sortedEntries.length, sortedExits.length);
 
   for (let i = 0; i < pairsCount; i++) {
-    let start = timeToMinutes(entryTimes[i]);
-    let end = timeToMinutes(exitTimes[i]);
+    let start = timeToMinutes(sortedEntries[i]);
+    let end = timeToMinutes(sortedExits[i]);
 
-    // Se a saída for antes da entrada (ex: 23:00 às 06:00), end vira dia seguinte
+    // Se a saída for numericamente menor (ex: entrada 22:00, saída 01:00), end vira dia seguinte
     if (end < start) {
       end += 24 * 60;
     }

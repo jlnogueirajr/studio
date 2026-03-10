@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * @fileOverview Fluxo Genkit para extração robusta de dados de ponto a partir de HTML.
@@ -39,13 +40,12 @@ Sua tarefa é extrair os horários da matrícula '{{{matricula}}}' do HTML abaix
 PROCEDIMENTO:
 1. Encontre a tabela com id="Grid".
 2. Cada linha (tr) dessa tabela contém um horário (td) no formato HH:MM.
-3. Exemplo de horários que você pode encontrar: 00:20, 16:14, 20:00.
-4. Identifique o dia selecionado no calendário (id="Calendar"). O dia com background-color:#CAD400 é o dia atual.
-5. Agrupe os horários em pares: Entrada e Saída.
-   - Se houver apenas 1 horário: É entrada.
-   - Se houver 2 horários: Entrada e Saída.
-   - Se houver 3 horários: Entrada, Saída e nova Entrada (ainda trabalhando).
-6. IMPORTANTE: Se um horário for antes das 05:00 da manhã (ex: 00:20), ele geralmente é o fechamento do turno do dia anterior. No entanto, se ele aparecer na lista de hoje, coloque-o como o último horário se ele for a conclusão de uma jornada iniciada antes da meia-noite.
+3. Exemplo de horários no HTML: 00:20, 16:14, 20:00.
+4. Identifique o dia selecionado no calendário (id="Calendar"). O dia com background-color:#CAD400 é o dia atual. Use a data {{{month}}}/{{{year}}}.
+5. Extraia TODOS os horários da tabela Grid para este dia.
+6. Apenas liste os horários encontrados. Não tente calcular as horas úteis ainda, apenas retorne os horários em entryTimes e exitTimes. 
+7. Se houver 3 horários (ex: 16:14, 20:00, 00:20), coloque os dois primeiros em entryTimes e os dois últimos em exitTimes (se aplicável) ou apenas retorne a lista crua para que o sistema processe. 
+   - Recomendação: Retorne os horários ímpares em entryTimes e os pares em exitTimes na ordem em que aparecem.
 
 HTML:
 {{{htmlContent}}}
