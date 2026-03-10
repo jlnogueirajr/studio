@@ -2,7 +2,7 @@
 'use server';
 /**
  * Server Action que realiza a consulta COMPLETA do mês no portal.
- * Refinado para capturar horários em tabelas ASP.NET dinâmicas.
+ * Baseado na lógica de referência para portais ASP.NET (Ponto Web).
  */
 
 import https from 'https';
@@ -10,63 +10,49 @@ import https from 'https';
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
 /**
- * Extrai todos os campos de formulário (inputs) de forma robusta.
+ * Extrai campos ocultos do formulário ASP.NET (__VIEWSTATE, __EVENTVALIDATION, etc.)
  */
-function extractAllInputs(html: string) {
-  const inputs: Record<string, string> = {};
-  const inputRegex = /<input[^>]+>/gi;
+function extractHiddenFields(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  const regex = /id="(__\w+)"\s+value="([^"]*)"/g;
   let match;
-  while ((match = inputRegex.exec(html)) !== null) {
-    const tag = match[0];
-    const nameMatch = tag.match(/name=["']([^"']+)["']/i);
-    const valueMatch = tag.match(/value=["']([^"']*)["']/i);
-    if (nameMatch) {
-      inputs[nameMatch[1]] = valueMatch ? valueMatch[1] : "";
-    }
+  while ((match = regex.exec(html)) !== null) {
+    fields[match[1]] = match[2];
   }
-  return inputs;
+  // Fallback para campos que usam 'name' em vez de 'id'
+  const nameRegex = /name="(__\w+)"\s+value="([^"]*)"/g;
+  while ((match = nameRegex.exec(html)) !== null) {
+    if (!fields[match[1]]) fields[match[1]] = match[2];
+  }
+  return fields;
 }
 
 /**
- * Extrai horários (HH:MM) de dentro da tabela "Grid" ou da resposta do servidor.
- * Agora mais flexível para capturar 00:20, 16:14, etc.
+ * Extrai horários (HH:MM) especificamente da tabela 'Grid'.
  */
-function extractTimes(html: string): string[] {
+function extractTimesFromGrid(html: string): string[] {
   const times: string[] = [];
-  
-  // Tenta focar na área do Grid, mas se não achar (AJAX response), olha o HTML todo
+  // Localiza a tabela Grid
   const gridMatch = html.match(/id="Grid"[\s\S]*?<\/table>/i);
-  const searchArea = gridMatch ? gridMatch[0] : html;
-  
-  // Regex busca HH:MM dentro de tags <td> ou áreas de texto puro
-  // Captura formatos como 08:00, 8:00, 00:20
+  if (!gridMatch) return [];
+
+  const gridHtml = gridMatch[0];
+  // Captura HH:MM dentro das tags <td>
   const timeRegex = />\s*([0-2]?\d:[0-5]\d)\s*</g;
   let match;
-  while ((match = timeRegex.exec(searchArea)) !== null) {
+  while ((match = timeRegex.exec(gridHtml)) !== null) {
     times.push(match[1]);
   }
-
-  // Fallback: se não achar com as tags, tenta busca plana de horários isolados
-  if (times.length === 0) {
-    const flatRegex = /\b([0-2]?\d:[0-5]\d)\b/g;
-    let flatMatch;
-    while ((flatMatch = flatRegex.exec(searchArea)) !== null) {
-      // Evita pegar o "07:20" da meta ou horários fixos do portal
-      if (!searchArea.includes('Meta') && !searchArea.includes('Carga Horária')) {
-         times.push(flatMatch[1]);
-      }
-    }
-  }
-
   return Array.from(new Set(times));
 }
 
 /**
- * Extrai o mapeamento de dias do calendário HTML.
+ * Extrai o mapeamento de dias do calendário HTML para saber qual argumento de PostBack usar.
  */
-function extractCalendarMap(html: string, targetMonth: number): Record<number, string> {
+function extractCalendarArguments(html: string, targetMonth: number): Record<number, string> {
   const map: Record<number, string> = {};
-  const linkRegex = /href="javascript:__doPostBack\('Calendar','(\w+)'\)"[^>]*?title="(\d+)\s+de\s+([^"]+)"/gi;
+  // Busca links: href="javascript:__doPostBack('Calendar','ARG')" title="DIA de MES"
+  const linkRegex = /href="javascript:__doPostBack\('Calendar','(\d+)'\)"[^>]*?title="(\d+)\s+de\s+([^"]+)"/gi;
   let match;
   const monthNames = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
   const targetMonthName = monthNames[targetMonth - 1];
@@ -88,12 +74,11 @@ export async function fetchMonthData(matricula: string, month: number, year: num
   const results: { date: string, times: string[] }[] = [];
 
   try {
-    // 1. GET Inicial
+    // 1. GET Inicial: Obtém cookies e ViewState base
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       },
       // @ts-ignore
       agent
@@ -102,14 +87,14 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     let html = await responseGet.text();
     let cookies: string[] = responseGet.headers.getSetCookie();
 
-    const calendarMap = extractCalendarMap(html, month);
-    const daysToFetch = Object.keys(calendarMap).map(Number).sort((a, b) => a - b);
+    const calendarArgs = extractCalendarArguments(html, month);
+    const daysToFetch = Object.keys(calendarArgs).map(Number).sort((a, b) => a - b);
 
     if (daysToFetch.length === 0) {
-      throw new Error("Não foi possível localizar o calendário do mês selecionado.");
+      throw new Error("Não foi possível localizar o calendário para o mês selecionado.");
     }
 
-    // 2. Itera sobre os dias
+    // 2. Itera sobre os dias do mês
     const today = new Date();
     const isCurrentMonth = today.getMonth() + 1 === month && today.getFullYear() === year;
     const lastDayToFetch = isCurrentMonth ? today.getDate() : 31;
@@ -117,38 +102,38 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     for (const day of daysToFetch) {
       if (day > lastDayToFetch) break;
 
-      const dayArg = calendarMap[day];
-      const inputs = extractAllInputs(html);
+      const dayArg = calendarArgs[day];
+      let hiddenFields = extractHiddenFields(html);
       
-      const body = new URLSearchParams();
-      Object.entries(inputs).forEach(([k, v]) => body.append(k, v));
-      
-      body.set('__EVENTTARGET', 'Calendar');
-      body.set('__EVENTARGUMENT', dayArg);
-      body.set('txtMatricula', matricula);
-      body.set('ScriptManager1', 'UpdatePanel1|Calendar');
+      const bodyDay = new URLSearchParams();
+      Object.entries(hiddenFields).forEach(([k, v]) => bodyDay.append(k, v));
+      bodyDay.set('__EVENTTARGET', 'Calendar');
+      bodyDay.set('__EVENTARGUMENT', dayArg);
+      bodyDay.set('txtMatricula', matricula);
+      bodyDay.set('ScriptManager1', 'UpdatePanel1|Calendar');
 
+      // POST 1: Selecionar o dia no calendário
       const respDay = await fetch(TARGET_URL, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
-          'User-Agent': 'Mozilla/5.0',
-          'Referer': TARGET_URL
+          'Referer': TARGET_URL,
+          'User-Agent': 'Mozilla/5.0'
         },
         // @ts-ignore
         agent,
-        body: body.toString()
+        body: bodyDay.toString()
       });
       
       html = await respDay.text();
-      const newDayCookies = respDay.headers.getSetCookie();
-      if (newDayCookies.length > 0) cookies = [...new Set([...cookies, ...newDayCookies])];
+      const newCookies = respDay.headers.getSetCookie();
+      if (newCookies.length > 0) cookies = [...new Set([...cookies, ...newCookies])];
 
-      // 3. Consultar
-      const inputsConsultar = extractAllInputs(html);
+      // POST 2: Clicar em Consultar (btnConsultar)
+      hiddenFields = extractHiddenFields(html);
       const bodyConsultar = new URLSearchParams();
-      Object.entries(inputsConsultar).forEach(([k, v]) => bodyConsultar.append(k, v));
+      Object.entries(hiddenFields).forEach(([k, v]) => bodyConsultar.append(k, v));
       
       bodyConsultar.set('__EVENTTARGET', 'btnConsultar');
       bodyConsultar.set('__EVENTARGUMENT', '');
@@ -160,8 +145,8 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         headers: { 
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
-          'User-Agent': 'Mozilla/5.0',
           'Referer': TARGET_URL,
+          'User-Agent': 'Mozilla/5.0',
           'X-MicrosoftAjax': 'Delta=true'
         },
         // @ts-ignore
@@ -170,20 +155,20 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       });
       
       const htmlFinal = await respFinal.text();
-      const times = extractTimes(htmlFinal);
+      const times = extractTimesFromGrid(htmlFinal);
 
       results.push({
         date: `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`,
         times
       });
       
-      // Prepara próximo loop
+      // Atualiza o HTML para o próximo loop (mantém ViewState atualizado)
       html = htmlFinal;
     }
 
     return results;
   } catch (error: any) {
-    console.error("Erro na consulta mensal:", error);
+    console.error("Erro na consulta do mês:", error);
     throw new Error(error.message || "Falha ao consultar portal.");
   }
 }
