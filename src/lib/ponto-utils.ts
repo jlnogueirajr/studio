@@ -101,10 +101,8 @@ export function sortPontoHours(hours: string[]): string[] {
 
 /**
  * Normaliza registros para turnos noturnos.
- * Se um dia começa com batidas de madrugada e o dia anterior terminou ímpar, move para o anterior.
  */
 export function normalizeNightShifts(records: any[]): any[] {
-  // Ordena cronologicamente para processar a sequência
   const sorted = [...records].sort((a, b) => {
     const [dA, mA, yA] = a.date.split('/').map(Number);
     const [dB, mB, yB] = b.date.split('/').map(Number);
@@ -115,12 +113,9 @@ export function normalizeNightShifts(records: any[]): any[] {
     const prev = sorted[i - 1];
     const curr = sorted[i];
 
-    // Se o dia anterior tem número ímpar de batidas (turno aberto)
     if (prev.times && prev.times.length % 2 !== 0) {
-      // Procura batidas na madrugada do dia atual (antes das 06:00)
       const madTimes = curr.times.filter((t: string) => timeToMinutes(t) < 360);
       if (madTimes.length > 0) {
-        // Pega a batida mais cedo da madrugada para fechar o turno anterior
         const earliest = madTimes.sort((a: string, b: string) => timeToMinutes(a) - timeToMinutes(b))[0];
         prev.times.push(earliest);
         curr.times = curr.times.filter((t: string) => t !== earliest);
@@ -132,24 +127,26 @@ export function normalizeNightShifts(records: any[]): any[] {
 }
 
 /**
- * Calcula o tempo trabalhado total do dia incluindo Hora Ficta Noturna.
+ * Calcula os minutos brutos trabalhados e o bônus noturno separadamente.
  */
-export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: string[]): number {
-  let totalMinutes = 0;
+export function calculateDetailedWork(entryTimes: string[], exitTimes: string[]): { total: number, nightBonus: number } {
+  let rawMinutes = 0;
   let nightMinutesRaw = 0;
   const pairsCount = Math.min(entryTimes.length, exitTimes.length);
 
   for (let i = 0; i < pairsCount; i++) {
     const start = timeToMinutes(entryTimes[i]);
-    let end = timeToMinutes(exitTimes[i]);
-    
-    // Tratamento de meia-noite
+    const end = timeToMinutes(exitTimes[i]);
     const adjustedEnd = end < start ? end + 1440 : end;
     
-    totalMinutes += (adjustedEnd - start);
+    rawMinutes += (adjustedEnd - start);
     nightMinutesRaw += calculateNightMinutes(start, adjustedEnd);
   }
 
-  const nightMinutesFicta = Math.round(nightMinutesRaw * (FATOR_NOTURNO - 1));
-  return totalMinutes + nightMinutesFicta;
+  const nightBonus = Math.round(nightMinutesRaw * (FATOR_NOTURNO - 1));
+  return { total: rawMinutes + nightBonus, nightBonus };
+}
+
+export function calculateDailyWorkedMinutes(entryTimes: string[], exitTimes: string[]): number {
+  return calculateDetailedWork(entryTimes, exitTimes).total;
 }

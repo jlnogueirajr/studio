@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Edit2, Info, Star, Landmark, Moon, Coffee } from "lucide-react";
-import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours, isDateDsr, calculateNightMinutes, timeToMinutes } from "@/lib/ponto-utils";
+import { calculateDetailedWork, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -48,8 +48,8 @@ export function DailyRecordsTable({
                 <TooltipContent className="max-w-xs p-3 bg-slate-900 text-white border-none shadow-xl">
                   <p className="font-bold text-xs">Regras de Cálculo:</p>
                   <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px] font-medium">
-                    <li>Hora Noturna: Adicional ficta de 1.1428x entre 22h e 05h.</li>
-                    <li>Trabalho em Feriado: Meta {minutesToTime(dailyWorkload)} + 1 Folga de Crédito.</li>
+                    <li>Hora Noturna: Ganho de 1.1428x entre 22h e 05h (Adicional Noturno).</li>
+                    <li>Trabalho em Feriado: Meta do dia + 1 Folga de Crédito.</li>
                     <li>Saldos: Verde (Extra), Vermelho (Débito).</li>
                   </ul>
                 </TooltipContent>
@@ -84,7 +84,7 @@ export function DailyRecordsTable({
                 const isMetaZeroDay = (isManualFolga || calendarDsr || calendarHoliday || record.isHoliday) && !record.isManualWork;
 
                 const sorted = sortPontoHours(record.times);
-                const workedMinutes = calculateDailyWorkedMinutes(
+                const { total: workedMinutes, nightBonus } = calculateDetailedWork(
                   sorted.filter((_, i) => i % 2 === 0),
                   sorted.filter((_, i) => i % 2 !== 0)
                 );
@@ -149,6 +149,18 @@ export function DailyRecordsTable({
                                 {time}
                               </Badge>
                             ))}
+                            {nightBonus > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <Moon className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-[10px] font-bold">Bônus Noturno Aplicado (+{minutesToTime(nightBonus)})</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                             {(record.isHoliday || calendarHoliday) && (
                               <TooltipProvider>
                                 <Tooltip>
@@ -161,7 +173,6 @@ export function DailyRecordsTable({
                                 </Tooltip>
                               </TooltipProvider>
                             )}
-                            {record.isCompensation && <Landmark className="w-3 h-3 text-amber-600" />}
                           </>
                         )}
                       </div>
