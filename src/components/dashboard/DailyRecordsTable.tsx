@@ -12,9 +12,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2 } from "lucide-react";
+import { Edit2, Info } from "lucide-react";
 import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface DailyRecordsTableProps {
   records: DailyRecord[];
@@ -24,21 +25,36 @@ interface DailyRecordsTableProps {
 
 export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecordsTableProps) {
   return (
-    <Card className="shadow-lg border-primary/10 overflow-hidden">
-      <CardHeader className="bg-muted/50 border-b border-primary/10">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <span>Detalhamento Diário</span>
-          <span className="text-xs font-normal text-muted-foreground">Recentemente importados no topo</span>
+    <Card className="shadow-lg border-primary/10 overflow-hidden bg-white">
+      <CardHeader className="bg-slate-50 border-b border-primary/10 py-4">
+        <CardTitle className="text-lg flex items-center justify-between font-bold text-slate-800">
+          <div className="flex items-center gap-2">
+            <span>Detalhamento de Batidas</span>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger>
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Dias úteis sem batida geram débito de 07:20.</p>
+                  <p>DSRs não descontam horas do saldo.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <span className="text-xs font-normal text-muted-foreground bg-white px-2 py-1 rounded-full border border-slate-200">
+            {records.length} dias processados
+          </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
-            <TableRow className="bg-slate-50">
-              <TableHead className="w-[120px] font-bold text-slate-700">Data</TableHead>
-              <TableHead className="font-bold text-slate-700">Registros / Status</TableHead>
-              <TableHead className="text-right font-bold text-slate-700">Úteis</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
+            <TableRow className="bg-slate-100/50 hover:bg-slate-100/50">
+              <TableHead className="w-[120px] font-black text-slate-900 uppercase text-[11px]">Data</TableHead>
+              <TableHead className="font-black text-slate-900 uppercase text-[11px]">Registros / Status</TableHead>
+              <TableHead className="text-right font-black text-slate-900 uppercase text-[11px]">Horas Úteis</TableHead>
+              <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -59,18 +75,24 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                 const isOdd = sorted.length % 2 !== 0;
                 
                 return (
-                  <TableRow key={record.id} className="group hover:bg-slate-50/80 transition-colors">
-                    <TableCell className="font-medium text-slate-900">
-                      {record.date}
-                      <div className="text-[10px] text-muted-foreground">
-                        {dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase()}
+                  <TableRow key={record.id} className="group hover:bg-slate-50 transition-colors border-slate-100">
+                    <TableCell className="font-bold text-slate-900">
+                      <div className="text-sm">{record.date}</div>
+                      <div className="text-[10px] font-black text-primary/70">
+                        {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' }).toUpperCase()}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1.5 items-center">
+                      <div className="flex flex-wrap gap-2 items-center">
                         {isNoTime ? (
-                          <Badge variant={isFixedDsr ? "outline" : "secondary"} className={isFixedDsr ? "border-green-500 text-green-700 bg-green-50" : "bg-slate-100"}>
-                            {isFixedDsr ? "FOLGA / DSR" : "SEM REGISTRO"}
+                          <Badge 
+                            variant="outline" 
+                            className={isFixedDsr 
+                              ? "border-green-600 text-green-700 bg-green-50 font-bold px-3 py-1" 
+                              : "border-red-600 text-red-700 bg-red-50 font-bold px-3 py-1 animate-pulse"
+                            }
+                          >
+                            {isFixedDsr ? "FOLGA / DSR" : "FALTA / DÉBITO"}
                           </Badge>
                         ) : (
                           sorted.map((time, i) => (
@@ -78,8 +100,8 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                               key={i} 
                               variant={i % 2 === 0 ? "secondary" : "outline"} 
                               className={i % 2 === 0 
-                                ? "bg-slate-700 text-white border-slate-700" 
-                                : "border-primary text-primary font-bold"
+                                ? "bg-slate-800 text-white border-slate-800 font-medium px-2" 
+                                : "border-primary text-primary font-black px-2 bg-white"
                               }
                             >
                               {time}
@@ -87,16 +109,27 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
                           ))
                         )}
                         {isOdd && (
-                          <Badge variant="destructive" className="animate-pulse py-0 h-5">Batida Ímpar</Badge>
+                          <Badge variant="destructive" className="animate-pulse py-0 h-5 font-bold uppercase text-[9px]">Batida Ímpar</Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-bold text-slate-900 text-base">
-                      {isNoTime && isFixedDsr ? "---" : formattedHours}
+                    <TableCell className="text-right font-black text-slate-900 text-base tabular-nums">
+                      {isNoTime && isFixedDsr ? (
+                        <span className="text-slate-300">---</span>
+                      ) : (
+                        <span className={workedMinutes === 0 ? "text-red-600" : "text-slate-900"}>
+                          {formattedHours}
+                        </span>
+                      )}
                     </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => onEdit(record)} className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8">
-                        <Edit2 className="w-3.5 h-3.5" />
+                    <TableCell className="text-center">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={() => onEdit(record)} 
+                        className="h-9 w-9 text-slate-400 hover:text-primary hover:bg-primary/5 transition-all"
+                      >
+                        <Edit2 className="w-4 h-4" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -104,8 +137,12 @@ export function DailyRecordsTable({ records, fixedDsrDays, onEdit }: DailyRecord
               })
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
-                  Nenhum registro encontrado. Sincronize para começar.
+                <TableCell colSpan={4} className="h-48 text-center text-muted-foreground font-medium">
+                  <div className="flex flex-col items-center gap-2">
+                    <Info className="w-8 h-8 text-slate-200" />
+                    <p>Nenhum registro encontrado.</p>
+                    <p className="text-xs">Sincronize com o portal para carregar os dados.</p>
+                  </div>
                 </TableCell>
               </TableRow>
             )}
