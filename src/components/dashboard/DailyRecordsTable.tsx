@@ -11,7 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2, Info, Star, Landmark, Moon } from "lucide-react";
+import { Edit2, Info, Star, Landmark, Moon, Coffee } from "lucide-react";
 import { calculateDailyWorkedMinutes, minutesToTime, sortPontoHours, isDateDsr, calculateNightMinutes, timeToMinutes } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -120,7 +120,7 @@ export function DailyRecordsTable({
                       <div className="text-sm">{record.date}</div>
                       <div className={cn(
                         "text-[9px] font-black p-0.5 rounded inline-block uppercase",
-                        isMetaZeroDay ? "text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400" : "text-primary bg-primary/10"
+                        isMetaZeroDay ? "text-green-700 bg-green-500/10 dark:text-green-400" : "text-primary bg-primary/10"
                       )}>
                         {dateObj.toLocaleDateString('pt-BR', { weekday: 'long' })}
                       </div>
@@ -131,16 +131,21 @@ export function DailyRecordsTable({
                           <Badge 
                             variant="outline" 
                             className={cn(
-                              "font-black px-3 py-1 shadow-sm uppercase text-[10px]",
+                              "font-black px-3 py-1 shadow-sm uppercase text-[10px] flex items-center gap-2",
                               isMetaZeroDay 
-                                ? "border-green-600 text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400" 
-                                : "border-red-600 text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400"
+                                ? "border-green-600/30 text-green-700 bg-green-500/10 dark:text-green-400" 
+                                : "border-red-600/30 text-red-700 bg-red-500/10 dark:text-red-400"
                             )}
                           >
-                            {record.isHoliday || calendarHoliday ? "Feriado" : 
-                             record.isBankOff ? "Folga Banco" : 
-                             record.isCompensation ? "Compensação Feriado" : 
-                             isMetaZeroDay ? "DSR / Folga" : "Falta / Débito"}
+                            {record.isHoliday || calendarHoliday ? (
+                              <><Star className="w-3 h-3" /> Feriado</>
+                            ) : record.isBankOff ? (
+                              <><Landmark className="w-3 h-3" /> Folga Banco</>
+                            ) : record.isCompensation ? (
+                              <><Coffee className="w-3 h-3" /> Compensação</>
+                            ) : isMetaZeroDay ? (
+                              "DSR / Folga"
+                            ) : "Falta / Débito"}
                           </Badge>
                         ) : (
                           <>
@@ -161,7 +166,7 @@ export function DailyRecordsTable({
                                <TooltipProvider>
                                <Tooltip>
                                  <TooltipTrigger>
-                                   <Moon className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
+                                   <Moon className="w-3 h-3 text-indigo-500" />
                                  </TooltipTrigger>
                                  <TooltipContent>
                                    <p className="text-[10px] font-bold">Adicional Noturno Aplicado</p>
@@ -193,8 +198,8 @@ export function DailyRecordsTable({
                       <span className={cn(
                         "px-2 py-0.5 rounded",
                         dailyBalance >= 0 
-                          ? "text-green-700 bg-green-50 dark:bg-green-900/30 dark:text-green-400" 
-                          : "text-red-700 bg-red-50 dark:bg-red-900/30 dark:text-red-400"
+                          ? "text-green-700 bg-green-500/10 dark:text-green-400" 
+                          : "text-red-700 bg-red-500/10 dark:text-red-400"
                       )}>
                         {minutesToTime(dailyBalance, true)}
                       </span>

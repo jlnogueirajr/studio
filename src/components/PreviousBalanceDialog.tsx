@@ -37,36 +37,36 @@ export function PreviousBalanceDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[425px] bg-white border-primary/20 shadow-2xl">
+      <DialogContent className="sm:max-w-[425px] bg-background border-border shadow-2xl">
         <DialogHeader>
-          <DialogTitle className="text-primary font-black text-2xl uppercase">SALDO INICIAL</DialogTitle>
-          <DialogDescription className="font-bold text-slate-600">
+          <DialogTitle className="text-primary font-black text-2xl uppercase tracking-tighter">SALDO INICIAL</DialogTitle>
+          <DialogDescription className="font-bold text-muted-foreground">
             Informe os saldos acumulados de meses anteriores para iniciar o controle preciso.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-4">
           <div className="space-y-2">
-            <Label htmlFor="balance" className="font-black text-slate-900 uppercase text-xs">
+            <Label htmlFor="balance" className="font-black text-foreground uppercase text-xs">
               Saldo de Horas (Banco)
             </Label>
             <Input
               id="balance"
               type="text"
               placeholder="HH:MM (ex: 10:30 ou -05:00)"
-              className="focus-visible:ring-primary font-mono font-black text-lg border-slate-300 h-12"
+              className="focus-visible:ring-primary font-mono font-black text-lg border-border bg-muted/30 h-12"
               value={balance}
               onChange={(e) => setBalance(e.target.value)}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="holidayDays" className="font-black text-slate-900 uppercase text-xs">
+            <Label htmlFor="holidayDays" className="font-black text-foreground uppercase text-xs">
               Saldo de Feriados Trabalhados (Dias)
             </Label>
             <Input
               id="holidayDays"
               type="number"
               placeholder="Dias acumulados para folgar"
-              className="focus-visible:ring-primary font-black text-lg border-slate-300 h-12"
+              className="focus-visible:ring-primary font-black text-lg border-border bg-muted/30 h-12"
               value={holidayBalance}
               onChange={(e) => setHolidayBalance(parseInt(e.target.value) || 0)}
             />
@@ -77,7 +77,7 @@ export function PreviousBalanceDialog({
         </div>
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={onClose} className="font-black">CANCELAR</Button>
-          <Button type="button" onClick={handleSave} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black px-8">
+          <Button type="button" onClick={handleSave} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black px-8 shadow-xl">
             SALVAR SALDOS
           </Button>
         </DialogFooter>

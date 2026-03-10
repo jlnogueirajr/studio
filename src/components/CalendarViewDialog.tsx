@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useMemo, useState } from 'react';
@@ -56,18 +55,18 @@ export function CalendarViewDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto border-primary/20 shadow-2xl bg-white">
+      <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto border-primary/20 shadow-2xl bg-background">
         <DialogHeader className="border-b pb-4">
           <div className="flex flex-col md:flex-row items-center justify-between w-full gap-4">
             <DialogTitle className="text-2xl font-black text-primary flex items-center gap-2">
               <CalendarIcon className="w-6 h-6" />
               PLANEJAMENTO ANUAL
             </DialogTitle>
-            <div className="flex items-center gap-4 bg-slate-100 p-1 rounded-lg border">
+            <div className="flex items-center gap-4 bg-muted p-1 rounded-lg border">
               <Button variant="ghost" size="icon" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))} className="h-8 w-8">
                 <ChevronLeft className="w-5 h-5" />
               </Button>
-              <span className="text-sm font-black min-w-[140px] text-center uppercase text-slate-700">
+              <span className="text-sm font-black min-w-[140px] text-center uppercase text-foreground">
                 {viewDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
               </span>
               <Button variant="ghost" size="icon" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))} className="h-8 w-8">
@@ -77,15 +76,15 @@ export function CalendarViewDialog({
           </div>
         </DialogHeader>
         
-        <div className="grid grid-cols-7 gap-1 border border-slate-200 rounded-xl overflow-hidden bg-slate-200 p-1 mt-4 shadow-inner">
+        <div className="grid grid-cols-7 gap-1 border border-border rounded-xl overflow-hidden bg-muted/20 p-1 mt-4 shadow-inner">
           {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-            <div key={day} className="bg-slate-300/50 p-2 text-center text-[10px] font-black uppercase text-slate-600">
+            <div key={day} className="bg-muted p-2 text-center text-[10px] font-black uppercase text-muted-foreground">
               {day}
             </div>
           ))}
           
           {daysInMonth.map((date, idx) => {
-            if (!date) return <div key={`empty-${idx}`} className="bg-slate-50/20" />;
+            if (!date) return <div key={`empty-${idx}`} className="bg-transparent" />;
             
             const dateStr = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()}`;
             const record = recordMap[dateStr];
@@ -108,7 +107,6 @@ export function CalendarViewDialog({
               );
             }
 
-            // Lógica de meta para o calendário:
             let goalForDay = 0;
             if (!isMetaZeroDay) {
               goalForDay = dailyWorkload;
@@ -125,16 +123,16 @@ export function CalendarViewDialog({
               <div 
                 key={dateStr} 
                 className={cn(
-                  "min-h-[110px] p-2 bg-white relative group transition-all border border-transparent hover:border-primary/40",
-                  isMetaZeroDay && "bg-green-50/40",
+                  "min-h-[110px] p-2 bg-card relative group transition-all border border-transparent hover:border-primary/40",
+                  isMetaZeroDay && "bg-primary/5",
                   isToday && "ring-2 ring-primary ring-inset z-10"
                 )}
               >
                 <div className="flex justify-between items-start">
                   <span className={cn(
                     "text-xs font-black",
-                    isMetaZeroDay ? "text-green-700" : "text-slate-900",
-                    isToday && "bg-primary text-white px-1.5 rounded-full"
+                    isMetaZeroDay ? "text-primary" : "text-foreground",
+                    isToday && "bg-primary text-primary-foreground px-1.5 rounded-full"
                   )}>
                     {date.getDate()}
                   </span>
@@ -144,30 +142,32 @@ export function CalendarViewDialog({
                 <div className="mt-2 space-y-1">
                   {record ? (
                     <>
-                      <div className="text-[10px] font-black text-slate-800 tabular-nums text-center">
+                      <div className="text-[10px] font-black text-foreground tabular-nums text-center">
                         {workedMinutes > 0 ? minutesToTime(workedMinutes) : "---"}
                       </div>
                       <div className={cn(
                         "text-[10px] font-black p-0.5 rounded text-center tabular-nums shadow-sm border",
-                        balance >= 0 ? "bg-green-100 text-green-700 border-green-200" : "bg-red-100 text-red-700 border-red-200"
+                        balance >= 0 
+                          ? "bg-green-500/10 text-green-600 border-green-500/20" 
+                          : "bg-red-500/10 text-red-600 border-red-500/20"
                       )}>
                         {minutesToTime(balance, true)}
                       </div>
                     </>
                   ) : (
                     !isMetaZeroDay && date < new Date() && (
-                      <div className="text-[9px] font-black bg-red-50 text-red-600 p-0.5 rounded text-center border border-red-100">
+                      <div className="text-[9px] font-black bg-destructive/10 text-destructive p-0.5 rounded text-center border border-destructive/20">
                         -{minutesToTime(dailyWorkload)}
                       </div>
                     )
                   )}
                   {isMetaZeroDay && !workedMinutes && (
-                    <div className="text-[8px] font-black text-green-600/70 text-center mt-1 uppercase">
+                    <div className="text-[8px] font-black text-primary/70 text-center mt-1 uppercase">
                       {calendarHoliday ? "Feriado" : "Folga"}
                     </div>
                   )}
                   {isMetaZeroDay && workedMinutes > 0 && (calendarHoliday || record?.isHoliday) && (
-                    <div className="text-[8px] font-black text-amber-600 text-center mt-1 uppercase">
+                    <div className="text-[8px] font-black text-amber-500 text-center mt-1 uppercase">
                       TRABALHADO
                     </div>
                   )}

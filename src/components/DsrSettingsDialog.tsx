@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -58,30 +57,30 @@ export function DsrSettingsDialog({ isOpen, fixedDsrDays, referenceSunday, daily
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto bg-background border-border">
         <DialogHeader>
-          <DialogTitle className="text-primary">Configurações de Jornada</DialogTitle>
-          <DialogDescription>Ajuste sua escala, carga horária e feriados.</DialogDescription>
+          <DialogTitle className="text-primary font-black uppercase tracking-tight">Configurações de Jornada</DialogTitle>
+          <DialogDescription className="font-medium">Ajuste sua escala, carga horária e feriados.</DialogDescription>
         </DialogHeader>
         
         <div className="space-y-6 py-2">
           <section className="space-y-3">
-            <Label className="text-sm font-black uppercase text-slate-700">Carga Horária Diária</Label>
+            <Label className="text-sm font-black uppercase text-muted-foreground">Carga Horária Diária</Label>
             <RadioGroup value={workload.toString()} onValueChange={(v) => setWorkload(parseInt(v))} className="grid grid-cols-2 gap-4">
-              <div className="flex items-center space-x-2 border p-3 rounded-lg bg-slate-50">
+              <div className="flex items-center space-x-2 border p-3 rounded-lg bg-muted/50">
                 <RadioGroupItem value="440" id="h720" />
-                <Label htmlFor="h720" className="cursor-pointer">7h20 (Escala 6x1)</Label>
+                <Label htmlFor="h720" className="cursor-pointer font-bold">7h20 (Escala 6x1)</Label>
               </div>
-              <div className="flex items-center space-x-2 border p-3 rounded-lg bg-slate-50">
+              <div className="flex items-center space-x-2 border p-3 rounded-lg bg-muted/50">
                 <RadioGroupItem value="528" id="h848" />
-                <Label htmlFor="h848" className="cursor-pointer">8h48 (Escala 5x2)</Label>
+                <Label htmlFor="h848" className="cursor-pointer font-bold">8h48 (Escala 5x2)</Label>
               </div>
             </RadioGroup>
           </section>
 
           <section className="space-y-3">
-            <Label className="text-sm font-black uppercase text-slate-700">Folgas Fixas Semanais</Label>
-            <div className="grid grid-cols-4 gap-2 bg-slate-50 p-3 rounded-lg border">
+            <Label className="text-sm font-black uppercase text-muted-foreground">Folgas Fixas Semanais</Label>
+            <div className="grid grid-cols-4 gap-2 bg-muted/50 p-3 rounded-lg border">
               {DAYS_OF_WEEK.map((day) => (
                 <div key={day.value} className="flex items-center space-x-2">
                   <Checkbox id={`day-${day.value}`} checked={selectedDays.includes(day.value)} onCheckedChange={() => toggleDay(day.value)} />
@@ -92,14 +91,14 @@ export function DsrSettingsDialog({ isOpen, fixedDsrDays, referenceSunday, daily
           </section>
 
           <section className="space-y-3">
-            <Label className="text-sm font-black uppercase text-slate-700">Feriados do Ano</Label>
+            <Label className="text-sm font-black uppercase text-muted-foreground">Feriados do Ano</Label>
             <div className="flex gap-2">
-              <Input type="date" value={newHday} onChange={(e) => setNewHday(e.target.value)} className="bg-white" />
+              <Input type="date" value={newHday} onChange={(e) => setNewHday(e.target.value)} className="bg-background border-border" />
               <Button size="icon" onClick={addHoliday} variant="secondary"><Plus className="w-4 h-4" /></Button>
             </div>
             <div className="flex flex-wrap gap-2 max-h-[100px] overflow-y-auto p-1">
               {hdays.sort().map(h => (
-                <div key={h} className="bg-slate-100 px-2 py-1 rounded text-[10px] font-black flex items-center gap-2 border">
+                <div key={h} className="bg-muted px-2 py-1 rounded text-[10px] font-black flex items-center gap-2 border">
                   {h.split('-').reverse().join('/')}
                   <Trash2 className="w-3 h-3 text-destructive cursor-pointer" onClick={() => removeHoliday(h)} />
                 </div>
@@ -108,17 +107,17 @@ export function DsrSettingsDialog({ isOpen, fixedDsrDays, referenceSunday, daily
           </section>
 
           <section className="space-y-3">
-            <Label className="text-sm font-black uppercase text-slate-700">Domingo de Referência (Escala 1x2)</Label>
+            <Label className="text-sm font-black uppercase text-muted-foreground">Domingo de Referência (Escala 1x2)</Label>
             <div className="bg-primary/5 p-4 rounded-lg border border-primary/10">
-              <p className="text-[11px] text-muted-foreground mb-2">Informe um domingo em que você <b>FOLGOU</b> para projetar a escala.</p>
-              <Input type="date" value={refSunday} onChange={(e) => setRefSunday(e.target.value)} className="bg-white" />
+              <p className="text-[11px] text-muted-foreground font-medium mb-2">Informe um domingo em que você <b>FOLGOU</b> para projetar a escala.</p>
+              <Input type="date" value={refSunday} onChange={(e) => setRefSunday(e.target.value)} className="bg-background" />
             </div>
           </section>
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => onSave(selectedDays, refSunday || null, workload, hdays)} className="bg-primary font-bold">Salvar Configurações</Button>
+          <Button variant="ghost" onClick={onClose} className="font-bold">Cancelar</Button>
+          <Button onClick={() => onSave(selectedDays, refSunday || null, workload, hdays)} className="bg-primary font-bold shadow-lg">Salvar Configurações</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
