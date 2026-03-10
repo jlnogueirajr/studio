@@ -1,21 +1,15 @@
-
 'use server';
 /**
  * Server Action responsável por realizar o scraping do portal da empresa.
+ * Implementa a lógica exata do PontoBot para lidar com ASP.NET UpdatePanels.
  */
 
 import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
 
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
-// Permite conexões com sites que possuem certificados SSL inválidos/expirados,
-// simulando o verify=False do Python.
-if (process.env.NODE_ENV !== 'production') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 /**
- * Extrai TODOS os inputs do HTML, simulando o comportamento do PontoBot.
+ * Extrai TODOS os inputs do HTML, incluindo campos ocultos vitais do ASP.NET.
  */
 function extractAllInputs(html: string) {
   const inputs: Record<string, string> = {};
@@ -24,15 +18,13 @@ function extractAllInputs(html: string) {
   while ((match = inputRegex.exec(html)) !== null) {
     const name = match[1];
     const value = match[2];
-    if (!/btn|submit|button/i.test(name) || name === 'btnConsultar') {
-      inputs[name] = value;
-    }
+    inputs[name] = value;
   }
   return inputs;
 }
 
 /**
- * Realiza a consulta no site da empresa.
+ * Realiza a consulta no site da empresa simulando o comportamento do PontoBot.
  */
 export async function fetchAndExtractPonto(matricula: string): Promise<RobustTimeDataExtractionOutput> {
   const now = new Date();
@@ -40,6 +32,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
   const year = now.getFullYear();
 
   try {
+    // 1. GET inicial para capturar cookies e VIEWSTATE
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
       headers: {
@@ -56,18 +49,20 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     const setCookie = responseGet.headers.get('set-cookie');
     const cookies = setCookie ? setCookie.split(',').map(c => c.split(';')[0]).join('; ') : '';
 
+    // 2. Prepara o POST com os tokens capturados
     const allInputs = extractAllInputs(htmlGet);
-
     const body = new URLSearchParams();
+    
     Object.entries(allInputs).forEach(([key, value]) => {
       body.append(key, value);
     });
     
+    // Configura os disparadores específicos do site (ScriptManager e btnConsultar)
+    body.set('ScriptManager1', 'UpdatePanel1|btnConsultar');
     body.set('__EVENTTARGET', 'btnConsultar'); 
     body.set('__EVENTARGUMENT', '');
     body.set('txtMatricula', matricula);
     body.set('btnConsultar', 'Consultar');
-    body.set('ScriptManager1', 'UpdatePanel1|btnConsultar');
 
     const responsePost = await fetch(TARGET_URL, {
       method: 'POST',
@@ -92,6 +87,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
       throw new Error("Matrícula não encontrada no portal da empresa.");
     }
 
+    // 3. IA processa o HTML resultante
     const extracted = await robustTimeDataExtraction({
       htmlContent,
       matricula,
@@ -100,7 +96,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     });
 
     if (!extracted || extracted.dailyRecords.length === 0) {
-      throw new Error("Nenhum registro de ponto encontrado para o dia selecionado.");
+      throw new Error("Nenhum registro de ponto encontrado para hoje.");
     }
 
     return extracted;
