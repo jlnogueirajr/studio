@@ -1,3 +1,4 @@
+
 'use server';
 /**
  * Server Action responsável por realizar o scraping do portal da empresa.
@@ -6,6 +7,12 @@
 import { robustTimeDataExtraction, RobustTimeDataExtractionOutput } from "@/ai/flows/robust-time-data-extraction-flow";
 
 const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
+
+// Permite conexões com sites que possuem certificados SSL inválidos/expirados,
+// simulando o verify=False do Python.
+if (process.env.NODE_ENV !== 'production') {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
 
 /**
  * Extrai TODOS os inputs do HTML, simulando o comportamento do PontoBot.
@@ -93,7 +100,7 @@ export async function fetchAndExtractPonto(matricula: string): Promise<RobustTim
     });
 
     if (!extracted || extracted.dailyRecords.length === 0) {
-      throw new Error("Nenhum registro de ponto encontrado. Verifique se há marcações para o período atual.");
+      throw new Error("Nenhum registro de ponto encontrado para o dia selecionado.");
     }
 
     return extracted;
