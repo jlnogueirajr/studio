@@ -26,6 +26,22 @@
             "type": "number"
           }
         },
+        "previousBalance": {
+          "type": "string",
+          "description": "Initial hour balance (HH:MM)."
+        },
+        "previousHolidayBalance": {
+          "type": "number",
+          "description": "Initial accumulated holiday credits (days)."
+        },
+        "dailyWorkload": {
+          "type": "number",
+          "description": "Daily workload in minutes."
+        },
+        "holidays": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"
@@ -96,16 +112,17 @@
             "type": "string"
           }
         },
-        "dailyTotalHours": {
-          "type": "number"
-        }
+        "isManualDsr": { "type": "boolean" },
+        "isManualWork": { "type": "boolean" },
+        "isHoliday": { "type": "boolean" },
+        "isCompensation": { "type": "boolean" },
+        "isBankOff": { "type": "boolean" }
       },
       "required": [
         "id",
         "monthlyTimeLogId",
         "date",
-        "times",
-        "dailyTotalHours"
+        "times"
       ]
     }
   },

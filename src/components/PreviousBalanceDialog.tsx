@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -8,44 +9,59 @@ import { Label } from '@/components/ui/label';
 
 interface PreviousBalanceDialogProps {
   isOpen: boolean;
-  onSave: (balance: string) => void;
+  onSave: (balance: string, holidayBalance: number) => void;
   onClose: () => void;
 }
 
 export function PreviousBalanceDialog({ isOpen, onSave, onClose }: PreviousBalanceDialogProps) {
   const [balance, setBalance] = useState('00:00');
+  const [holidayBalance, setHolidayBalance] = useState(0);
 
   const handleSave = () => {
-    onSave(balance);
+    onSave(balance, holidayBalance);
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Saldo do Mês Anterior</DialogTitle>
+          <DialogTitle className="text-primary font-black">SALDO INICIAL</DialogTitle>
           <DialogDescription>
-            Parece que é sua primeira consulta. Informe o saldo acumulado do mês anterior para complementar o cálculo atual.
+            Informe os saldos acumulados de meses anteriores para iniciar o controle.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="balance" className="text-right">
-              Saldo
+        <div className="grid gap-6 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="balance" className="font-bold text-slate-700 uppercase text-[10px]">
+              Saldo de Horas (Banco)
             </Label>
             <Input
               id="balance"
               type="text"
-              placeholder="HH:MM"
-              className="col-span-3 focus-visible:ring-primary"
+              placeholder="HH:MM (ex: 10:30 ou -05:00)"
+              className="focus-visible:ring-primary font-mono font-bold"
               value={balance}
               onChange={(e) => setBalance(e.target.value)}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="holidayDays" className="font-bold text-slate-700 uppercase text-[10px]">
+              Saldo de Feriados (Dias)
+            </Label>
+            <Input
+              id="holidayDays"
+              type="number"
+              placeholder="Dias acumulados para folgar"
+              className="focus-visible:ring-primary font-bold"
+              value={holidayBalance}
+              onChange={(e) => setHolidayBalance(parseInt(e.target.value) || 0)}
+            />
+            <p className="text-[10px] text-muted-foreground italic">Feriados trabalhados em meses anteriores que você ainda não folgou.</p>
+          </div>
         </div>
         <DialogFooter>
-          <Button type="button" onClick={handleSave} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            Salvar Saldo
+          <Button type="button" onClick={handleSave} className="bg-primary hover:bg-primary/90 text-primary-foreground font-black">
+            SALVAR SALDOS
           </Button>
         </DialogFooter>
       </DialogContent>

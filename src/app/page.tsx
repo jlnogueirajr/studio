@@ -34,6 +34,7 @@ export type DailyRecord = {
 export type EmployeeData = {
   matricula: string;
   previousBalance: string;
+  previousHolidayBalance: number;
   lastFetch: string;
   fixedDsrDays: number[];
   referenceDsrSunday?: string | null;
@@ -92,7 +93,9 @@ export default function Home() {
           fixedDsrDays: base.fixedDsrDays || [0],
           dailyWorkload: base.dailyWorkload || 440,
           holidays: base.holidays || [],
-          referenceDsrSunday: base.referenceDsrSunday || null
+          referenceDsrSunday: base.referenceDsrSunday || null,
+          previousHolidayBalance: base.previousHolidayBalance || 0,
+          previousBalance: base.previousBalance || '00:00'
         } as EmployeeData);
       }
     } catch (e) { toast({ variant: "destructive", title: "Erro ao carregar" }); }
@@ -119,6 +122,7 @@ export default function Home() {
         holidays: stored?.holidays || [],
         referenceDsrSunday: stored?.referenceDsrSunday || null,
         previousBalance: stored?.previousBalance || '00:00',
+        previousHolidayBalance: stored?.previousHolidayBalance || 0,
         lastFetch: new Date().toISOString(), updatedAt: new Date().toISOString(),
         createdAt: stored?.createdAt || new Date().toISOString()
       };
@@ -170,7 +174,8 @@ export default function Home() {
       `Mês de Referência: ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}\n` +
       `--------------------------------------------------\n` +
       `Carga Horária: ${minutesToTime(employeeData.dailyWorkload)}\n` +
-      `Saldo Anterior: ${employeeData.previousBalance}\n\n` +
+      `Saldo Anterior: ${employeeData.previousBalance}\n` +
+      `Saldo Feriados Anterior: ${employeeData.previousHolidayBalance} dias\n\n` +
       `OCORRÊNCIAS:\n` +
       employeeData.dailyRecords.filter(r => r.times.length === 0).map(r => `- ${r.date}: ${r.isManualDsr ? 'DSR' : (r.isHoliday ? 'FERIADO' : (r.isBankOff ? 'FOLGA BANCO' : 'FALTA'))}`).join('\n') +
       `\n\nGerado em: ${new Date().toLocaleString()}`;
@@ -190,14 +195,14 @@ export default function Home() {
         <header className="flex flex-col md:flex-row items-center justify-between gap-4 border-b border-primary/20 pb-6">
           <div className="space-y-1 text-center md:text-left">
             <h1 className="text-4xl font-bold text-primary tracking-tight">Ponto <span className="text-slate-900">Ágil</span></h1>
-            <p className="text-muted-foreground">Gestão corporativa de horas e escalas.</p>
+            <p className="text-muted-foreground font-bold">Gestão corporativa de horas e escalas.</p>
           </div>
           {matricula && (
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={exportRhReport} className="bg-white border-primary/30"><FileText className="w-4 h-4 mr-2" /> RH</Button>
-              <Button variant="outline" size="sm" onClick={() => setShowCalendarDialog(true)} className="bg-white"><Calendar className="w-4 h-4 mr-2" /> Calendário</Button>
-              <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-white"><Settings className="w-4 h-4 mr-2" /> Escala</Button>
-              <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }}><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
+              <Button variant="outline" size="sm" onClick={exportRhReport} className="bg-white border-primary/30 font-black"><FileText className="w-4 h-4 mr-2" /> RH</Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCalendarDialog(true)} className="bg-white border-primary/30 font-black"><Calendar className="w-4 h-4 mr-2" /> CALENDÁRIO</Button>
+              <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-white border-primary/30 font-black"><Settings className="w-4 h-4 mr-2" /> ESCALA</Button>
+              <Button variant="ghost" size="sm" onClick={() => { localStorage.removeItem('last_matricula'); setMatricula(null); }} className="font-bold"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
             </div>
           )}
         </header>
@@ -213,12 +218,13 @@ export default function Home() {
           <div className="space-y-8 animate-in fade-in duration-700">
             <div className="flex flex-col md:flex-row items-center justify-between gap-4">
               <h2 className="text-2xl font-black text-slate-800">Matrícula <span className="text-primary">#{matricula}</span></h2>
-              <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm" className="shadow-lg font-bold"><RefreshCcw className="w-4 h-4 mr-2" /> Sincronizar Agora</Button>
+              <Button onClick={() => handleSearch(matricula!)} variant="default" size="sm" className="shadow-lg font-black"><RefreshCcw className="w-4 h-4 mr-2" /> ATUALIZAR AGORA</Button>
             </div>
 
             <SummaryCards 
               records={employeeData?.dailyRecords || []} 
               previousBalance={employeeData?.previousBalance || '00:00'}
+              previousHolidayBalance={employeeData?.previousHolidayBalance || 0}
               fixedDsrDays={employeeData?.fixedDsrDays || [0]}
               referenceDsrSunday={employeeData?.referenceDsrSunday}
               dailyWorkload={employeeData?.dailyWorkload || 440}
@@ -236,9 +242,9 @@ export default function Home() {
           </div>
         )}
 
-        <PreviousBalanceDialog isOpen={showBalanceDialog} onSave={async b => {
+        <PreviousBalanceDialog isOpen={showBalanceDialog} onSave={async (b, hb) => {
           if (matricula && firestore && user) {
-            await setDoc(doc(firestore, 'users', user.uid, 'employees', matricula), { previousBalance: b }, { merge: true });
+            await setDoc(doc(firestore, 'users', user.uid, 'employees', matricula), { previousBalance: b, previousHolidayBalance: hb }, { merge: true });
             setShowBalanceDialog(false);
             loadEmployeeData(matricula);
           }
