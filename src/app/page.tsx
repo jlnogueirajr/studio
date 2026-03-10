@@ -72,7 +72,7 @@ export default function Home() {
         const logsSnap = await getDocs(logsRef);
         const records = logsSnap.docs.map(d => d.data() as DailyRecord);
         
-        // Ordenação Ascendente: Do mais antigo para o mais atual
+        // Ordenação Ascendente: Do dia 1 para o dia atual
         const sortedRecords = records.sort((a, b) => {
            const dateA = a.date.split('/').reverse().join('');
            const dateB = b.date.split('/').reverse().join('');
@@ -103,7 +103,7 @@ export default function Home() {
       toast({
         variant: "destructive",
         title: "Aguarde...",
-        description: "O sistema de banco de dados ainda está inicializando."
+        description: "O sistema ainda está inicializando."
       });
       return;
     }
@@ -118,6 +118,7 @@ export default function Home() {
       const year = now.getFullYear();
       const monthYear = `${year}-${month.toString().padStart(2, '0')}`;
 
+      // Busca todos os dias do mês no portal
       const freshData = await fetchMonthData(m, month, year);
       const batch = writeBatch(firestore);
       
@@ -186,7 +187,7 @@ export default function Home() {
       toast({
         variant: "destructive",
         title: "Erro na consulta",
-        description: error.message || "Falha ao acessar o portal ou salvar dados."
+        description: error.message || "Falha ao acessar o portal."
       });
     } finally {
       setIsLoading(false);
@@ -254,8 +255,8 @@ export default function Home() {
           <div className="py-20 flex flex-col items-center justify-center gap-4 text-center">
             <RefreshCcw className="w-12 h-12 text-primary animate-spin" />
             <div className="space-y-2">
-              <h2 className="text-xl font-semibold">Sincronizando Calendário...</h2>
-              <p className="text-muted-foreground">Extraindo registros dia a dia. Isso pode levar alguns segundos.</p>
+              <h2 className="text-xl font-semibold">Sincronizando Calendário Mensal...</h2>
+              <p className="text-muted-foreground">Lendo todos os dias do mês. Isso pode levar até 1 minuto.</p>
             </div>
           </div>
         ) : (
