@@ -2,7 +2,13 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   distDir: 'dist',
-  /* config options here */
+  /* Desativa o cache do webpack em produção para evitar arquivos > 25MB no Cloudflare */
+  webpack: (config, { dev }) => {
+    if (!dev) {
+      config.cache = false;
+    }
+    return config;
+  },
   typescript: {
     ignoreBuildErrors: true,
   },
