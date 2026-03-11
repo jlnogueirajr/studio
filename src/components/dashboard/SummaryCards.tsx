@@ -11,23 +11,33 @@ import { cn } from '@/lib/utils';
 interface SummaryCardsProps {
   records: DailyRecord[];
   previousBalance: string;
+  previousBalanceMonth?: number;
+  previousBalanceYear?: number;
+  balanceAdjustment?: string;
   previousHolidayBalance: number;
   fixedDsrDays: number[];
   referenceDsrSunday?: string | null;
   dailyWorkload: number;
   holidays: string[];
   onBalanceClick?: () => void;
+  currentViewMonth?: number;
+  currentViewYear?: number;
 }
 
 export function SummaryCards({ 
   records, 
   previousBalance, 
+  previousBalanceMonth,
+  previousBalanceYear,
+  balanceAdjustment = '00:00',
   previousHolidayBalance,
   fixedDsrDays, 
   referenceDsrSunday, 
   dailyWorkload,
   holidays,
-  onBalanceClick
+  onBalanceClick,
+  currentViewMonth,
+  currentViewYear
 }: SummaryCardsProps) {
   const [todayStr, setTodayStr] = useState<string>('');
 
@@ -43,12 +53,25 @@ export function SummaryCards({
 
     if (!todayStr) return null;
 
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
     records.forEach(record => {
       // Regra: Não calcula o saldo do dia atual para não afetar o banco de horas enquanto o usuário trabalha
       if (record.date === todayStr) return;
 
       const [day, month, year] = record.date.split('/').map(Number);
       const dateObj = new Date(year, month - 1, day);
+
+      // NOVO: Dias futuros não contam no banco
+      if (dateObj > today) return;
+
+      // NOVO: Respeitar o mês/ano inicial de saldo
+      if (previousBalanceYear && previousBalanceMonth) {
+        if (year < previousBalanceYear || (year === previousBalanceYear && month < previousBalanceMonth)) {
+          return;
+        }
+      }
 
       const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
       
@@ -63,7 +86,6 @@ export function SummaryCards({
       const isSystemDsr = calendarDsr;
       
       const isMetaZero = (isManualFolga || isSystemHoliday || isSystemDsr) && !record.isManualWork;
-      
       const goalForDay = isMetaZero ? 0 : dailyWorkload;
 
       if (dailyWorked > 0 || !isMetaZero) {
@@ -76,19 +98,34 @@ export function SummaryCards({
     });
 
     const prevBalanceMinutes = timeToMinutes(previousBalance);
+    const adjustmentMinutes = timeToMinutes(balanceAdjustment);
     const monthBalanceMinutes = totalWorkedMinutes - totalGoalMinutes;
-    const totalBalanceMinutes = monthBalanceMinutes + prevBalanceMinutes;
+    
+    // O banco total só mostra se estivermos visualizando o mês do saldo ou superior
+    let totalBalanceMinutes = 0;
+    let showTotal = true;
+
+    if (previousBalanceYear && previousBalanceMonth && currentViewYear && currentViewMonth) {
+      if (currentViewYear < previousBalanceYear || (currentViewYear === previousBalanceYear && currentViewMonth < previousBalanceMonth)) {
+        showTotal = false;
+      }
+    }
+
+    if (showTotal) {
+      totalBalanceMinutes = monthBalanceMinutes + prevBalanceMinutes + adjustmentMinutes;
+    }
 
     return {
       monthTotal: minutesToTime(totalWorkedMinutes),
       monthBalance: minutesToTime(monthBalanceMinutes, true),
       monthBalanceMinutes,
-      totalBalance: minutesToTime(totalBalanceMinutes, true),
+      totalBalance: showTotal ? minutesToTime(totalBalanceMinutes, true) : "---",
       isPositive: totalBalanceMinutes >= 0,
       isMonthPositive: monthBalanceMinutes >= 0,
       holidayBalance: holidayCredits - holidayUsed + (previousHolidayBalance || 0),
+      showTotal
     };
-  }, [records, previousBalance, previousHolidayBalance, fixedDsrDays, referenceDsrSunday, dailyWorkload, holidays, todayStr]);
+  }, [records, previousBalance, previousBalanceMonth, previousBalanceYear, balanceAdjustment, previousHolidayBalance, fixedDsrDays, referenceDsrSunday, dailyWorkload, holidays, todayStr, currentViewMonth, currentViewYear]);
 
   if (!stats) return null;
 
@@ -116,7 +153,7 @@ export function SummaryCards({
         className="border-l-4 border-l-amber-600 shadow-sm bg-card cursor-pointer hover:bg-accent transition-colors"
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Saldo de Folgas</CardTitle>
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Folgas Feriado</CardTitle>
           <Landmark className="h-4 w-4 text-amber-600" />
         </CardHeader>
         <CardContent>
@@ -126,7 +163,7 @@ export function SummaryCards({
           )}>
             {stats.holidayBalance} dias
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Feriados p/ Compensar</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Acumulado p/ Compensar</p>
         </CardContent>
       </Card>
 
@@ -145,21 +182,21 @@ export function SummaryCards({
         onClick={onBalanceClick}
         className={cn(
           "border-l-4 shadow-sm bg-card cursor-pointer hover:bg-accent transition-colors",
-          stats.isPositive ? 'border-l-green-600' : 'border-l-destructive'
+          !stats.showTotal ? 'border-l-slate-300' : (stats.isPositive ? 'border-l-green-600' : 'border-l-destructive')
         )}
       >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Banco Total</CardTitle>
-          <TrendingUp className={cn("h-4 w-4", stats.isPositive ? 'text-green-600' : 'text-destructive')} />
+          <CardTitle className="text-[11px] font-black text-foreground uppercase tracking-tighter">Banco Geral</CardTitle>
+          <TrendingUp className={cn("h-4 w-4", !stats.showTotal ? 'text-slate-300' : (stats.isPositive ? 'text-green-600' : 'text-destructive'))} />
         </CardHeader>
         <CardContent>
           <div className={cn(
             "text-2xl font-black",
-            stats.isPositive ? 'text-green-700' : 'text-destructive'
+            !stats.showTotal ? 'text-slate-400' : (stats.isPositive ? 'text-green-700' : 'text-destructive')
           )}>
             {stats.totalBalance}
           </div>
-          <p className="text-[10px] text-muted-foreground font-bold uppercase">Saldo Acumulado Geral</p>
+          <p className="text-[10px] text-muted-foreground font-bold uppercase">Saldo Final Acumulado</p>
         </CardContent>
       </Card>
     </div>

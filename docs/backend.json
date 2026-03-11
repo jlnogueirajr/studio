@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Employee": {
@@ -17,6 +18,26 @@
         "uid": {
           "type": "string",
           "description": "The current Firebase Auth UID linked to this registration number."
+        },
+        "previousBalance": {
+          "type": "string",
+          "description": "Initial hour balance (HH:MM)."
+        },
+        "previousBalanceMonth": {
+          "type": "number",
+          "description": "The month the initial balance refers to."
+        },
+        "previousBalanceYear": {
+          "type": "number",
+          "description": "The year the initial balance refers to."
+        },
+        "balanceAdjustment": {
+          "type": "string",
+          "description": "Manual balance adjustment for HR differences (HH:MM)."
+        },
+        "previousHolidayBalance": {
+          "type": "number",
+          "description": "Initial holiday balance in days."
         },
         "authVersion": {
           "type": "number",
@@ -51,7 +72,7 @@
         },
         "employeeId": {
           "type": "string",
-          "description": "Reference to the Employee whose time record this is. (Relationship: Employee 1:N MonthlyTimeRecord)"
+          "description": "Reference to the Employee whose time record this is."
         },
         "year": {
           "type": "number",
@@ -63,79 +84,17 @@
         },
         "dailyRecords": {
           "type": "array",
-          "description": "An array of daily time clock entries for the month. Each item details a specific day's clock events.",
+          "description": "An array of daily time clock entries for the month.",
           "items": {
             "type": "string"
           }
-        },
-        "scrapeTimestamp": {
-          "type": "string",
-          "description": "Timestamp indicating when this monthly record was last successfully scraped from the external system.",
-          "format": "date-time"
-        },
-        "totalMonthlyHours": {
-          "type": "number",
-          "description": "The aggregated total hours for the entire month, calculated from daily records or directly scraped."
         }
       },
       "required": [
         "id",
         "employeeId",
         "year",
-        "month",
-        "dailyRecords",
-        "scrapeTimestamp"
-      ]
-    },
-    "MonthlyBalance": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "MonthlyBalance",
-      "type": "object",
-      "description": "Stores an employee's hour balance for a specific month, including any manually entered previous balance and the calculated current month's cumulative balance.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the MonthlyBalance entity."
-        },
-        "employeeId": {
-          "type": "string",
-          "description": "Reference to the Employee this balance belongs to. (Relationship: Employee 1:N MonthlyBalance)"
-        },
-        "year": {
-          "type": "number",
-          "description": "The year of the balance record."
-        },
-        "month": {
-          "type": "number",
-          "description": "The month of the balance record (1-12)."
-        },
-        "previousMonthBalance": {
-          "type": "number",
-          "description": "The hour balance carried over from the previous month. This can be manually entered for the first recorded month for an employee."
-        },
-        "currentMonthCalculatedBalance": {
-          "type": "number",
-          "description": "The calculated balance for the current month, based on the MonthlyTimeRecord data for this month."
-        },
-        "cumulativeBalance": {
-          "type": "number",
-          "description": "The total cumulative hour balance for the employee up to the end of this month."
-        },
-        "lastUpdated": {
-          "type": "string",
-          "description": "Timestamp when this balance record was last updated or calculated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "employeeId",
-        "year",
-        "month",
-        "previousMonthBalance",
-        "currentMonthCalculatedBalance",
-        "cumulativeBalance",
-        "lastUpdated"
+        "month"
       ]
     }
   },
@@ -154,7 +113,7 @@
           "schema": {
             "$ref": "#/backend/entities/Employee"
           },
-          "description": "Stores individual employee records. Access is restricted to the owner (matching UID) or admins."
+          "description": "Stores individual employee records."
         }
       }
     ]

@@ -37,6 +37,9 @@ export type EmployeeData = {
   id: string;
   matricula: string;
   previousBalance: string;
+  previousBalanceMonth?: number;
+  previousBalanceYear?: number;
+  balanceAdjustment?: string;
   previousHolidayBalance: number;
   lastFetch: string;
   fixedDsrDays: number[];
@@ -66,14 +69,12 @@ export default function Home() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
 
-  // Inicializa mês e ano apenas no cliente para evitar erros de hidratação
   useEffect(() => {
     const now = new Date();
     if (viewMonth === null) setViewMonth(now.getMonth() + 1);
     if (viewYear === null) setViewYear(now.getFullYear());
   }, []);
 
-  // Carrega matrícula do cache e dados do usuário se autenticado
   useEffect(() => {
     const saved = localStorage.getItem('logged_matricula');
     if (saved && user && firestore && viewMonth !== null && viewYear !== null) {
@@ -95,19 +96,16 @@ export default function Home() {
         base = docSnap.data();
       }
 
-      // Carrega registros diários
       const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', mYear, 'dailyEntries');
       const logsSnap = await getDocs(logsRef);
       const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
       
-      // Gera visualização completa do mês (dias sem batida aparecem como vazios)
       const daysInMonth = new Date(year, month, 0).getDate();
       const now = new Date();
-      const isCurrentMonth = month === (now.getMonth() + 1) && year === now.getFullYear();
-      const lastDayToRender = isCurrentMonth ? now.getDate() : daysInMonth;
-
+      now.setHours(0,0,0,0);
+      
       const fullMonthRecords: DailyRecord[] = [];
-      for (let d = 1; d <= lastDayToRender; d++) {
+      for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
         const existing = rawRecords.find(r => r.date === dateStr);
         if (existing) {
@@ -139,6 +137,9 @@ export default function Home() {
         referenceDsrSunday: base.referenceDsrSunday || null,
         previousHolidayBalance: base.previousHolidayBalance || 0,
         previousBalance: base.previousBalance || '00:00',
+        previousBalanceMonth: base.previousBalanceMonth,
+        previousBalanceYear: base.previousBalanceYear,
+        balanceAdjustment: base.balanceAdjustment || '00:00',
         isAdmin: m === '000000' || base.isAdmin,
         uid: base.uid,
         authVersion: base.authVersion || 0
@@ -305,12 +306,17 @@ export default function Home() {
             <SummaryCards 
               records={employeeData?.dailyRecords || []} 
               previousBalance={employeeData?.previousBalance || '00:00'}
+              previousBalanceMonth={employeeData?.previousBalanceMonth}
+              previousBalanceYear={employeeData?.previousBalanceYear}
+              balanceAdjustment={employeeData?.balanceAdjustment || '00:00'}
               previousHolidayBalance={employeeData?.previousHolidayBalance || 0}
               fixedDsrDays={employeeData?.fixedDsrDays || [0]}
               referenceDsrSunday={employeeData?.referenceDsrSunday}
               dailyWorkload={employeeData?.dailyWorkload || 440}
               holidays={employeeData?.holidays || []}
               onBalanceClick={() => setShowBalanceDialog(true)}
+              currentViewMonth={viewMonth}
+              currentViewYear={viewYear}
             />
 
             <DailyRecordsTable 
@@ -326,10 +332,19 @@ export default function Home() {
 
         <PreviousBalanceDialog isOpen={showBalanceDialog} 
           currentBalance={employeeData?.previousBalance}
+          currentMonth={employeeData?.previousBalanceMonth}
+          currentYear={employeeData?.previousBalanceYear}
+          currentAdjustment={employeeData?.balanceAdjustment}
           currentHolidayBalance={employeeData?.previousHolidayBalance}
-          onSave={async (b, hb) => {
+          onSave={async (b, month, year, adj, hb) => {
             if (matricula && firestore) {
-              await setDoc(doc(firestore, 'userProfiles', matricula), { previousBalance: b, previousHolidayBalance: hb }, { merge: true });
+              await setDoc(doc(firestore, 'userProfiles', matricula), { 
+                previousBalance: b, 
+                previousBalanceMonth: month, 
+                previousBalanceYear: year,
+                balanceAdjustment: adj,
+                previousHolidayBalance: hb 
+              }, { merge: true });
               setShowBalanceDialog(false);
               loadEmployeeData(matricula, viewMonth!, viewYear!);
             }

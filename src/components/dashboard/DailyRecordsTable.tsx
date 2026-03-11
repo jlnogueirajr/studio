@@ -13,7 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Edit2, Info, Star, Landmark, Moon, Coffee, AlertCircle, Clock } from "lucide-react";
+import { Edit2, Info, Star, Landmark, Moon, Coffee, Clock, CalendarClock } from "lucide-react";
 import { calculateDetailedWork, minutesToTime, sortPontoHours, isDateDsr } from "@/lib/ponto-utils";
 import { DailyRecord } from "@/app/page";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -58,9 +58,9 @@ export function DailyRecordsTable({
                   <ul className="list-disc ml-4 mt-2 space-y-1 text-[11px] font-medium">
                     <li>Hora Extra = Trabalhado - Meta (ex: 07:20).</li>
                     <li>Em Folgas/DSR/Feriados sem batidas, o saldo é 0.</li>
-                    <li>Se trabalhar na Folga/Feriado, a meta é 0 e tudo vira Extra.</li>
                     <li>🌙 Indica bônus noturno já somado ao total.</li>
                     <li>Hoje: O saldo de hoje não conta no banco até amanhã.</li>
+                    <li>Futuro: Dias futuros não descontam horas da meta.</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
@@ -89,6 +89,10 @@ export function DailyRecordsTable({
                 const dateObj = new Date(year, month - 1, day);
                 const isToday = record.date === todayStr;
                 
+                const todayRef = new Date();
+                todayRef.setHours(0,0,0,0);
+                const isFuture = dateObj > todayRef;
+
                 const { isDsr: calendarDsr, isHoliday: calendarHoliday } = isDateDsr(dateObj, fixedDsrDays, referenceDsrSunday, holidays);
                 
                 const isManualFolga = record.isManualDsr || record.isBankOff || record.isCompensation;
@@ -104,15 +108,25 @@ export function DailyRecordsTable({
                 );
                 
                 const goalForDay = isMetaZeroDay ? 0 : dailyWorkload;
-                // Para o dia de hoje, se não terminou, mostra saldo zero para não afetar o banco visualmente
-                const dailyBalance = (isToday && workedMinutes < goalForDay) ? 0 : (workedMinutes > 0 || isMetaZeroDay ? workedMinutes - goalForDay : -dailyWorkload);
                 
+                // Saldo: 0 para futuro ou hoje (se não terminou)
+                const isCalculated = workedMinutes > 0 || isMetaZeroDay;
+                let dailyBalance = 0;
+                if (isFuture) {
+                  dailyBalance = 0;
+                } else if (isToday && workedMinutes < goalForDay) {
+                  dailyBalance = 0;
+                } else {
+                  dailyBalance = isCalculated ? workedMinutes - goalForDay : -dailyWorkload;
+                }
+
                 const isNoTime = !record.times || record.times.length === 0;
 
                 return (
                   <TableRow key={record.id} className={cn(
                     "group hover:bg-accent/30 transition-colors border-border",
-                    isToday && "bg-primary/5"
+                    isToday && "bg-primary/5",
+                    isFuture && "opacity-60"
                   )}>
                     <TableCell className="font-black text-foreground border-r py-3">
                       <div className="flex items-center gap-2">
@@ -128,7 +142,11 @@ export function DailyRecordsTable({
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2 items-center">
-                        {isNoTime ? (
+                        {isFuture ? (
+                          <Badge variant="outline" className="font-black px-3 py-1 uppercase text-[10px] flex items-center gap-2 border-slate-400/30 text-slate-500 bg-slate-500/5">
+                            <CalendarClock className="w-3 h-3" /> Aguardando jornada...
+                          </Badge>
+                        ) : isNoTime ? (
                           <Badge 
                             variant="outline" 
                             className={cn(
@@ -173,18 +191,18 @@ export function DailyRecordsTable({
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-black text-foreground text-base tabular-nums">
-                      {workedMinutes > 0 ? minutesToTime(workedMinutes) : (isToday && !isNoTime ? "Em curso" : "---")}
+                      {isFuture ? "---" : (workedMinutes > 0 ? minutesToTime(workedMinutes) : (isToday && !isNoTime ? "Em curso" : "---"))}
                     </TableCell>
                     <TableCell className="text-right font-black text-base tabular-nums border-l bg-primary/5">
                       <span className={cn(
                         "px-2 py-0.5 rounded",
-                        isToday && dailyBalance === 0 ? "text-muted-foreground bg-muted" : (
+                        (isToday && dailyBalance === 0) || isFuture ? "text-muted-foreground bg-muted" : (
                           dailyBalance >= 0 
                             ? "text-green-700 bg-green-500/10 dark:text-green-400" 
                             : "text-red-700 bg-red-500/10 dark:text-red-400"
                         )
                       )}>
-                        {isToday && dailyBalance === 0 ? "--:--" : minutesToTime(dailyBalance, true)}
+                        {isFuture ? "--:--" : (isToday && dailyBalance === 0 ? "--:--" : minutesToTime(dailyBalance, true))}
                       </span>
                     </TableCell>
                     <TableCell className="text-center">
