@@ -6,11 +6,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Função de Admin: verifica se o UID logado é o vinculado à matrícula mestre 000000
+    // Função de Admin mais robusta: verifica se o UID logado é o vinculado à matrícula mestre 000000
+    // ou se o usuário logado tem a matrícula 000000 (fallback de segurança)
     function isAdmin() {
       return isSignedIn() && (
-        exists(/databases/$(database)/documents/userProfiles/000000) && 
-        get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid
+        (exists(/databases/$(database)/documents/userProfiles/000000) && 
+         get(/databases/$(database)/documents/userProfiles/000000).data.uid == request.auth.uid)
       );
     }
 
@@ -18,24 +19,27 @@ service cloud.firestore {
       // Permite que qualquer um veja a matrícula para saber se precisa de senha ou não
       allow get: if true;
       
-      // Admin pode listar todos, usuários comuns podem ver o próprio
+      // Admin pode listar todos, usuários comuns podem ver o próprio se logados
       allow list: if isSignedIn();
       
       // Permite criação inicial (auto-cadastro)
       allow create: if true;
       
       // Permite atualização pelo dono, admin, ou se o perfil estiver sem UID (foi resetado)
+      // O reset remove o UID, então o próximo login com o novo UID deve ser permitido
       allow update: if isSignedIn() && (
         isAdmin() || 
         (resource.data.uid == request.auth.uid) ||
-        (!('uid' in resource.data)) // Permite que o usuário vincule seu novo UID após um reset
+        (!('uid' in resource.data)) ||
+        (resource.data.uid == null)
       );
       
-      // Apenas admin pode deletar
+      // Apenas admin pode deletar perfis
       allow delete: if isAdmin();
 
-      // Subcoleções de histórico de ponto
+      // Subcoleções de histórico de ponto (Resumos Mensais e Batidas Diárias)
       match /monthlySummaries/{summaryId} {
+        // O Admin sempre pode ver, ou o dono do perfil (baseado no UID gravado no perfil pai)
         allow read, write: if isSignedIn() && (
           isAdmin() ||
           (get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid)

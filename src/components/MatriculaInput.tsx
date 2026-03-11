@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Search, Loader2, UserPlus, Key } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
 
 interface MatriculaInputProps {
@@ -38,13 +39,12 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
         setIsNewUser(true);
       } else {
         const data = docSnap.data();
-        // É novo usuário se não houver um UID vinculado (nunca logou ou foi resetado)
+        // É considerado novo acesso se o UID estiver vazio (pós-reset ou primeiro acesso)
         setIsNewUser(!data?.uid);
       }
       setStep('password');
     } catch (error) {
       console.error("Erro ao verificar matrícula:", error);
-      // Fallback em caso de erro: permitir tentativa de login
       setIsNewUser(false);
       setStep('password');
     } finally {
@@ -52,12 +52,14 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
     }
   };
 
-  const handleSubmitLogin = (e: React.FormEvent) => {
+  const handleSubmitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isNewUser && password !== confirmPassword) {
-      toast({ variant: "destructive", title: "Senhas não coincidem" });
+      toast({ variant: "destructive", title: "As senhas informadas não coincidem." });
       return;
     }
+    
+    // Passa para a função de login na página principal
     onLogin(matricula.trim(), password, isNewUser);
   };
 
@@ -80,7 +82,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
           {step === 'matricula' 
             ? 'Digite sua matrícula para começar.' 
             : isNewUser 
-              ? 'Crie uma nova senha para acessar sua conta.' 
+              ? 'Defina sua senha para vincular seu novo acesso.' 
               : `Digite a senha para a matrícula ${matricula}.`}
         </CardDescription>
       </CardHeader>
@@ -139,7 +141,7 @@ export function MatriculaInput({ onLogin, isLoading }: MatriculaInputProps) {
                 disabled={isLoading || !password.trim()} 
                 className="w-full h-12 text-lg font-black bg-primary hover:bg-primary/90 shadow-lg uppercase"
               >
-                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Cadastrar' : 'Entrar'}
+                {isLoading ? <Loader2 className="animate-spin" /> : isNewUser ? 'Vincular e Entrar' : 'Entrar'}
               </Button>
               
               <Button 

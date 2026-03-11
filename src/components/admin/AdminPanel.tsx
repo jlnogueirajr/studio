@@ -31,13 +31,12 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
     if (!firestore) return;
     setIsLoading(true);
     try {
-      // Busca simples sem orderBy para evitar necessidade de índices manuais no Firebase
       const snap = await getDocs(collection(firestore, 'userProfiles'));
       
       const userList = await Promise.all(snap.docs.map(async (userDoc) => {
         const data = userDoc.data();
         const matricula = userDoc.id;
-        let totalBalanceStr = "00:00";
+        let totalBalanceStr = "---";
         
         try {
           const mYear = `${new Date().getFullYear()}-${(new Date().getMonth() + 1).toString().padStart(2, '0')}`;
@@ -66,8 +65,8 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
           const totalBalanceMinutes = (monthWorked - monthGoal) + prevBalance;
           totalBalanceStr = minutesToTime(totalBalanceMinutes, true);
         } catch (e) {
-          // Se falhar o cálculo de um usuário específico, mantém o saldo zerado para não quebrar a lista
-          console.warn(`Erro ao calcular saldo do usuário ${matricula}`);
+          // Se não conseguir calcular (ex: sem UID), mostra apenas o que for possível
+          totalBalanceStr = data.previousBalance || "---";
         }
 
         return {
@@ -79,12 +78,11 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
         };
       }));
 
-      // Ordenação em memória para garantir performance e evitar erros de índice
       const sortedUsers = userList.sort((a, b) => a.registrationNumber.localeCompare(b.registrationNumber));
       setUsers(sortedUsers);
     } catch (e: any) {
       console.error("Erro no fetchUsers:", e);
-      toast({ variant: "destructive", title: "Erro ao carregar usuários", description: "Verifique as permissões de administrador." });
+      toast({ variant: "destructive", title: "Erro ao carregar usuários", description: "Verifique as permissões do sistema." });
     } finally {
       setIsLoading(false);
     }
@@ -95,20 +93,21 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
     try {
       const docRef = doc(firestore, 'userProfiles', matricula);
       const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) throw new Error("Usuário não localizado.");
+      if (!docSnap.exists()) throw new Error("Perfil não localizado.");
       
       const data = docSnap.data();
       const newVersion = (data?.authVersion || 0) + 1;
       
+      // Apenas atualiza campos de auth, PRESERVANDO todo o histórico e configurações
       await updateDoc(docRef, {
         authVersion: newVersion,
-        uid: deleteField(),
+        uid: deleteField(), // Remove o UID atual para permitir que o novo acesso assuma o perfil
         updatedAt: new Date().toISOString()
       });
       
       toast({ 
         title: `Acesso de ${matricula} resetado!`, 
-        description: "O colaborador deverá criar uma nova senha no próximo acesso." 
+        description: "O histórico foi preservado. O colaborador deverá definir uma nova senha agora." 
       });
       fetchUsers();
     } catch (e: any) {
@@ -130,7 +129,7 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
                 <User className="text-primary" /> PAINEL DE CONTROLE ADM
               </CardTitle>
               <CardDescription className="font-bold text-muted-foreground">
-                Gerencie acessos e resete senhas para novos cadastros.
+                Gerencie acessos e resete senhas mantendo o histórico intacto.
               </CardDescription>
             </div>
             <div className="relative w-full md:w-72">
@@ -155,8 +154,8 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
               <TableHeader>
                 <TableRow className="bg-muted hover:bg-muted">
                   <TableHead className="font-black text-foreground uppercase text-xs">Matrícula</TableHead>
-                  <TableHead className="font-black text-foreground uppercase text-xs">Acesso</TableHead>
-                  <TableHead className="font-black text-foreground uppercase text-xs text-right">Saldo Geral</TableHead>
+                  <TableHead className="font-black text-foreground uppercase text-xs">Status de Acesso</TableHead>
+                  <TableHead className="font-black text-foreground uppercase text-xs text-right">Saldo Atual</TableHead>
                   <TableHead className="font-black text-foreground uppercase text-xs text-center w-40">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -167,12 +166,14 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
                       <TableCell className="font-black text-foreground text-lg tracking-widest">{u.registrationNumber}</TableCell>
                       <TableCell className="text-muted-foreground font-bold">
                         <div className="flex flex-col">
-                          <span className="text-xs">{u.uid ? 'Ativo' : 'Pendente'}</span>
-                          <span className="text-[10px] opacity-70">v{u.authVersion || 0}</span>
+                          <span className={u.uid ? "text-green-600 text-xs" : "text-amber-600 text-xs"}>
+                            {u.uid ? 'Ativo e Vinculado' : 'Aguardando Nova Senha'}
+                          </span>
+                          <span className="text-[10px] opacity-70">Versão Auth: v{u.authVersion || 0}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={`px-3 py-1 rounded-full font-black text-sm inline-flex items-center gap-1.5 ${u.totalBalance.startsWith('-') ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>
+                        <span className={`px-3 py-1 rounded-full font-black text-sm inline-flex items-center gap-1.5 ${u.totalBalance.startsWith('-') ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-600'}`}>
                           <Clock className="w-3 h-3" /> {u.totalBalance}
                         </span>
                       </TableCell>
@@ -184,7 +185,7 @@ export function AdminPanel({ onRefresh }: AdminPanelProps) {
                             onClick={() => handleResetPassword(u.registrationNumber)}
                             className="font-black text-xs hover:bg-destructive/10 text-destructive border-destructive/20"
                           >
-                            <RotateCcw className="w-3 h-3 mr-2" /> Zerar Senha
+                            <RotateCcw className="w-3 h-3 mr-2" /> Resetar Senha
                           </Button>
                         )}
                       </TableCell>
