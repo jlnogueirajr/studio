@@ -82,9 +82,6 @@ function extractCalendarArguments(html: string, targetMonth: number): Record<num
 }
 
 export async function fetchMonthData(matricula: string, month: number, year: number) {
-  // Desabilita verificação SSL apenas para o portal interno durante a execução da consulta
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  
   const results: { date: string, times: string[] }[] = [];
   const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
@@ -92,7 +89,9 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     // 0. GET inicial
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      // Cloudflare/Edge environments don't support NODE_TLS_REJECT_UNAUTHORIZED
+      // If needed, specific fetch options for internal targets can be used here
     });
     
     let html = await responseGet.text();
