@@ -1,14 +1,8 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  distDir: 'dist',
-  /* Desativa o cache do webpack em produção para evitar arquivos > 25MB no Cloudflare */
-  webpack: (config, { dev }) => {
-    if (!dev) {
-      config.cache = false;
-    }
-    return config;
-  },
+  /* Mantemos a configuração padrão para evitar conflitos com o Turbopack em desenvolvimento */
+  /* O Cloudflare deve ser configurado para usar a pasta '.next' (padrão do Next.js) */
   typescript: {
     ignoreBuildErrors: true,
   },
