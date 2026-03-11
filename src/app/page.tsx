@@ -17,7 +17,7 @@ import { toast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
 import { useFirestore, useUser, useAuth } from '@/firebase';
 import { doc, getDoc, setDoc, collection, getDocs, writeBatch } from 'firebase/firestore';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, UserCredential } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { normalizeNightShifts } from '@/lib/ponto-utils';
 
 export type DailyRecord = {
@@ -65,6 +65,7 @@ export default function Home() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
 
+  // Carrega matrícula do cache e dados do usuário se autenticado
   useEffect(() => {
     const saved = localStorage.getItem('logged_matricula');
     if (saved && user && firestore) {
@@ -83,14 +84,16 @@ export default function Home() {
       
       if (docSnap.exists()) {
         const base = docSnap.data();
+        
+        // Carrega registros diários
         const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', mYear, 'dailyEntries');
         const logsSnap = await getDocs(logsRef);
         const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
         
+        // Gera visualização completa do mês (dias sem batida aparecem como vazios)
         const daysInMonth = new Date(year, month, 0).getDate();
-        const lastDayToRender = (month === (new Date().getMonth() + 1) && year === new Date().getFullYear()) 
-          ? new Date().getDate() 
-          : daysInMonth;
+        const isCurrentMonth = month === (new Date().getMonth() + 1) && year === new Date().getFullYear();
+        const lastDayToRender = isCurrentMonth ? new Date().getDate() : daysInMonth;
 
         const fullMonthRecords: DailyRecord[] = [];
         for (let d = 1; d <= lastDayToRender; d++) {
@@ -226,12 +229,28 @@ export default function Home() {
           <div className="py-20">
             <MatriculaInput onLogin={async (m, p, isSignUp) => {
               try {
-                const version = (await getDoc(doc(firestore!, 'userProfiles', m))).data()?.authVersion || 0;
+                // Recupera versão de autenticação para construir o e-mail (usado para resets)
+                const docSnap = await getDoc(doc(firestore!, 'userProfiles', m));
+                const version = docSnap.exists() ? (docSnap.data()?.authVersion || 0) : 0;
                 const email = `m${m}_v${version}@pontoagil.com.br`;
-                let cred;
-                if (isSignUp) cred = await createUserWithEmailAndPassword(auth!, email, p);
-                else cred = await signInWithEmailAndPassword(auth!, email, p);
                 
+                let cred;
+                try {
+                  if (isSignUp) {
+                    cred = await createUserWithEmailAndPassword(auth!, email, p);
+                  } else {
+                    cred = await signInWithEmailAndPassword(auth!, email, p);
+                  }
+                } catch (authError: any) {
+                  // Se tentar cadastrar e a conta já existir no Auth, tenta logar
+                  if (isSignUp && authError.code === 'auth/email-already-in-use') {
+                    cred = await signInWithEmailAndPassword(auth!, email, p);
+                  } else {
+                    throw authError;
+                  }
+                }
+                
+                // Vincula o UID do Auth ao perfil do Firestore
                 await setDoc(doc(firestore!, 'userProfiles', m), {
                   uid: cred.user.uid,
                   registrationNumber: m,
@@ -241,9 +260,9 @@ export default function Home() {
                 
                 localStorage.setItem('logged_matricula', m);
                 setMatricula(m);
-                loadEmployeeData(m, viewMonth, viewYear);
+                // loadEmployeeData será chamado via useEffect quando o estado 'user' atualizar
               } catch (e: any) {
-                toast({ variant: "destructive", title: "Erro", description: e.message });
+                toast({ variant: "destructive", title: "Erro de Acesso", description: e.message });
               }
             }} isLoading={isLoading} />
           </div>
