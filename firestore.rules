@@ -6,7 +6,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Função de Admin robusta: verifica se o UID logado é o vinculado à matrícula mestre 000000
+    // Função de Admin: verifica se o UID logado é o vinculado à matrícula mestre 000000
     function isAdmin() {
       return isSignedIn() && (
         exists(/databases/$(database)/documents/userProfiles/000000) && 
@@ -24,12 +24,11 @@ service cloud.firestore {
       // Permite criação inicial (auto-cadastro)
       allow create: if true;
       
-      // Permite atualização pelo dono ou admin
-      allow update: if (
-        isSignedIn() && (
-          (request.auth.uid == resource.data.uid) ||
-          isAdmin()
-        )
+      // Permite atualização pelo dono, admin, ou se o perfil estiver sem UID (foi resetado)
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (resource.data.uid == request.auth.uid) ||
+        (!('uid' in resource.data)) // Permite que o usuário vincule seu novo UID após um reset
       );
       
       // Apenas admin pode deletar
@@ -38,14 +37,14 @@ service cloud.firestore {
       // Subcoleções de histórico de ponto
       match /monthlySummaries/{summaryId} {
         allow read, write: if isSignedIn() && (
-          (get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid) ||
-          isAdmin()
+          isAdmin() ||
+          (get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid)
         );
         
         match /dailyEntries/{entryId} {
           allow read, write: if isSignedIn() && (
-            (get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid) ||
-            isAdmin()
+            isAdmin() ||
+            (get(/databases/$(database)/documents/userProfiles/$(matricula)).data.uid == request.auth.uid)
           );
         }
       }
