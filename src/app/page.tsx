@@ -82,57 +82,58 @@ export default function Home() {
       const docRef = doc(firestore, 'userProfiles', m);
       const docSnap = await getDoc(docRef);
       
+      let base = { isAdmin: m === '000000' } as any;
       if (docSnap.exists()) {
-        const base = docSnap.data();
-        
-        // Carrega registros diários
-        const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', mYear, 'dailyEntries');
-        const logsSnap = await getDocs(logsRef);
-        const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
-        
-        // Gera visualização completa do mês (dias sem batida aparecem como vazios)
-        const daysInMonth = new Date(year, month, 0).getDate();
-        const isCurrentMonth = month === (new Date().getMonth() + 1) && year === new Date().getFullYear();
-        const lastDayToRender = isCurrentMonth ? new Date().getDate() : daysInMonth;
-
-        const fullMonthRecords: DailyRecord[] = [];
-        for (let d = 1; d <= lastDayToRender; d++) {
-          const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
-          const existing = rawRecords.find(r => r.date === dateStr);
-          if (existing) {
-            fullMonthRecords.push(existing);
-          } else {
-            fullMonthRecords.push({
-              id: `v-${dateStr.replace(/\//g, '-')}`,
-              date: dateStr,
-              times: []
-            });
-          }
-        }
-
-        const normalized = normalizeNightShifts(fullMonthRecords);
-        const sortedRecords = normalized.sort((a, b) => {
-           const [dA, mA, yA] = a.date.split('/').map(Number);
-           const [dB, mB, yB] = b.date.split('/').map(Number);
-           return new Date(yB, mB-1, dB).getTime() - new Date(yA, mA-1, dA).getTime();
-        });
-
-        setEmployeeData({
-          ...base,
-          id: m,
-          matricula: m,
-          dailyRecords: sortedRecords,
-          fixedDsrDays: base.fixedDsrDays || [0],
-          dailyWorkload: base.dailyWorkload || 440,
-          holidays: base.holidays || [],
-          referenceDsrSunday: base.referenceDsrSunday || null,
-          previousHolidayBalance: base.previousHolidayBalance || 0,
-          previousBalance: base.previousBalance || '00:00',
-          isAdmin: base.isAdmin || m === '000000',
-          uid: base.uid,
-          authVersion: base.authVersion || 0
-        } as EmployeeData);
+        base = docSnap.data();
       }
+
+      // Carrega registros diários
+      const logsRef = collection(firestore, 'userProfiles', m, 'monthlySummaries', mYear, 'dailyEntries');
+      const logsSnap = await getDocs(logsRef);
+      const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
+      
+      // Gera visualização completa do mês (dias sem batida aparecem como vazios)
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const isCurrentMonth = month === (new Date().getMonth() + 1) && year === new Date().getFullYear();
+      const lastDayToRender = isCurrentMonth ? new Date().getDate() : daysInMonth;
+
+      const fullMonthRecords: DailyRecord[] = [];
+      for (let d = 1; d <= lastDayToRender; d++) {
+        const dateStr = `${d.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+        const existing = rawRecords.find(r => r.date === dateStr);
+        if (existing) {
+          fullMonthRecords.push(existing);
+        } else {
+          fullMonthRecords.push({
+            id: `v-${dateStr.replace(/\//g, '-')}`,
+            date: dateStr,
+            times: []
+          });
+        }
+      }
+
+      const normalized = normalizeNightShifts(fullMonthRecords);
+      const sortedRecords = normalized.sort((a, b) => {
+          const [dA, mA, yA] = a.date.split('/').map(Number);
+          const [dB, mB, yB] = b.date.split('/').map(Number);
+          return new Date(yB, mB-1, dB).getTime() - new Date(yA, mA-1, dA).getTime();
+      });
+
+      setEmployeeData({
+        ...base,
+        id: m,
+        matricula: m,
+        dailyRecords: sortedRecords,
+        fixedDsrDays: base.fixedDsrDays || [0],
+        dailyWorkload: base.dailyWorkload || 440,
+        holidays: base.holidays || [],
+        referenceDsrSunday: base.referenceDsrSunday || null,
+        previousHolidayBalance: base.previousHolidayBalance || 0,
+        previousBalance: base.previousBalance || '00:00',
+        isAdmin: m === '000000' || base.isAdmin,
+        uid: base.uid,
+        authVersion: base.authVersion || 0
+      } as EmployeeData);
     } catch (e) { 
       console.error("Erro ao carregar dados:", e);
     } finally { 
@@ -190,6 +191,8 @@ export default function Home() {
 
   if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
 
+  const isAdminUser = matricula === '000000' || employeeData?.isAdmin;
+
   return (
     <main className="min-h-screen bg-background p-4 md:p-8 transition-colors duration-300">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -203,7 +206,7 @@ export default function Home() {
           </div>
           {matricula && (
             <div className="flex flex-wrap items-center justify-center gap-2">
-              {employeeData?.isAdmin && (
+              {isAdminUser && (
                 <Button variant={showAdminPanel ? "default" : "outline"} size="sm" onClick={() => setShowAdminPanel(!showAdminPanel)} className="font-black border-primary/30">
                   <ShieldCheck className="w-4 h-4 mr-2" /> {showAdminPanel ? 'MEU PONTO' : 'PAINEL ADM'}
                 </Button>
@@ -229,7 +232,6 @@ export default function Home() {
           <div className="py-20">
             <MatriculaInput onLogin={async (m, p, isSignUp) => {
               try {
-                // Recupera versão de autenticação para construir o e-mail (usado para resets)
                 const docSnap = await getDoc(doc(firestore!, 'userProfiles', m));
                 const version = docSnap.exists() ? (docSnap.data()?.authVersion || 0) : 0;
                 const email = `m${m}_v${version}@pontoagil.com.br`;
@@ -242,7 +244,6 @@ export default function Home() {
                     cred = await signInWithEmailAndPassword(auth!, email, p);
                   }
                 } catch (authError: any) {
-                  // Se tentar cadastrar e a conta já existir no Auth, tenta logar
                   if (isSignUp && authError.code === 'auth/email-already-in-use') {
                     cred = await signInWithEmailAndPassword(auth!, email, p);
                   } else {
@@ -250,7 +251,6 @@ export default function Home() {
                   }
                 }
                 
-                // Vincula o UID do Auth ao perfil do Firestore
                 await setDoc(doc(firestore!, 'userProfiles', m), {
                   uid: cred.user.uid,
                   registrationNumber: m,
@@ -260,7 +260,6 @@ export default function Home() {
                 
                 localStorage.setItem('logged_matricula', m);
                 setMatricula(m);
-                // loadEmployeeData será chamado via useEffect quando o estado 'user' atualizar
               } catch (e: any) {
                 toast({ variant: "destructive", title: "Erro de Acesso", description: e.message });
               }
