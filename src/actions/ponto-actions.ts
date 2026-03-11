@@ -7,7 +7,6 @@
 
 /**
  * Extrai campos ocultos de um HTML completo ou de uma resposta Delta AJAX.
- * O formato Delta é |length|type|id|content|
  */
 function updateFields(html: string, currentFields: Record<string, string>): Record<string, string> {
   const fields = { ...currentFields };
@@ -29,39 +28,31 @@ function updateFields(html: string, currentFields: Record<string, string>): Reco
     }
   }
 
-  // Fallback para HTML completo (primeira carga ou erro de delta)
+  // Fallback para HTML completo
   const regex = /id="(__\w+)"\s+value="([^"]*)"/g;
   let match;
   while ((match = regex.exec(html)) !== null) {
     fields[match[1]] = match[2];
   }
   
-  // Garante que campos críticos sejam mantidos
   return fields;
 }
 
-/**
- * Extrai horários da tabela Grid de forma robusta.
- */
 function extractTimesFromGrid(html: string): string[] {
   const times: string[] = [];
-  // Busca por qualquer horário HH:MM dentro da resposta
-  const timeRegex = />\s*([0-2]?\d:[0-5]\d)\s*</g;
+  // Busca horários HH:MM dentro da tabela Grid
+  const timeRegex = /<td>\s*([0-2]?\d:[0-5]\d)\s*<\/td>/g;
   let match;
   while ((match = timeRegex.exec(html)) !== null) {
     times.push(match[1]);
   }
   
-  // Limpa e formata
   return Array.from(new Set(times)).map(t => {
       const parts = t.split(':');
       return `${parts[0].padStart(2, '0')}:${parts[1]}`;
   });
 }
 
-/**
- * Identifica os argumentos do PostBack para os dias do mês solicitado.
- */
 function extractCalendarArguments(html: string, targetMonth: number): Record<number, string> {
   const map: Record<number, string> = {};
   const linkRegex = /href="javascript:__doPostBack\('Calendar','(\d+)'\)"[^>]*?title="(\d+)\s+de\s+([^"]+)"/gi;
@@ -86,14 +77,23 @@ export async function fetchMonthData(matricula: string, month: number, year: num
   const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 
   try {
-    // 0. GET inicial
+    const commonHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+      'Origin': 'https://webapp.confianca.com.br',
+      'Referer': TARGET_URL,
+    };
+
+    // 0. GET inicial para pegar VIEWSTATE e Cookies
     const responseGet = await fetch(TARGET_URL, {
       method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      // Cloudflare/Edge environments don't support NODE_TLS_REJECT_UNAUTHORIZED
-      // If needed, specific fetch options for internal targets can be used here
+      headers: commonHeaders,
+      cache: 'no-store'
     });
     
+    if (!responseGet.ok) throw new Error(`Portal indisponível (Status ${responseGet.status})`);
+
     let html = await responseGet.text();
     let cookies = responseGet.headers.getSetCookie();
     let hiddenFields = updateFields(html, {});
@@ -102,20 +102,20 @@ export async function fetchMonthData(matricula: string, month: number, year: num
     const daysToFetch = Object.keys(calendarArgs).map(Number).sort((a, b) => a - b);
 
     if (daysToFetch.length === 0) {
-      throw new Error("Calendário não localizado. Verifique a matrícula.");
+      throw new Error("Não foi possível localizar o calendário para o mês solicitado.");
     }
 
     const today = new Date();
     const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month < (today.getMonth() + 1));
     const lastDayToFetch = isPastMonth ? 31 : today.getDate();
 
-    // Loop por todos os dias do mês até o dia atual
+    // Loop por todos os dias do mês
     for (const day of daysToFetch) {
       if (day > lastDayToFetch) break;
 
       const dayArg = calendarArgs[day];
       
-      // PASSO 1: Selecionar o dia no calendário
+      // PASSO 1: Selecionar o dia
       const bodyDay = new URLSearchParams();
       Object.entries(hiddenFields).forEach(([k, v]) => bodyDay.append(k, v));
       bodyDay.set('__EVENTTARGET', 'Calendar');
@@ -126,10 +126,10 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       const respDay = await fetch(TARGET_URL, {
         method: 'POST',
         headers: { 
+          ...commonHeaders,
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
           'X-MicrosoftAjax': 'Delta=true',
-          'User-Agent': 'Mozilla/5.0'
         },
         body: bodyDay.toString()
       });
@@ -140,7 +140,7 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       const newCookies = respDay.headers.getSetCookie();
       if (newCookies.length > 0) cookies = newCookies;
 
-      // PASSO 2: Consultar horários do dia selecionado
+      // PASSO 2: Consultar horários
       const bodyConsultar = new URLSearchParams();
       Object.entries(hiddenFields).forEach(([k, v]) => bodyConsultar.append(k, v));
       bodyConsultar.set('__EVENTTARGET', 'btnConsultar');
@@ -150,10 +150,10 @@ export async function fetchMonthData(matricula: string, month: number, year: num
       const respFinal = await fetch(TARGET_URL, {
         method: 'POST',
         headers: { 
+          ...commonHeaders,
           'Content-Type': 'application/x-www-form-urlencoded',
           'Cookie': cookies.join('; '),
           'X-MicrosoftAjax': 'Delta=true',
-          'User-Agent': 'Mozilla/5.0'
         },
         body: bodyConsultar.toString()
       });
@@ -168,13 +168,12 @@ export async function fetchMonthData(matricula: string, month: number, year: num
         });
       }
       
-      // Atualiza campos para o próximo dia no loop
       hiddenFields = updateFields(deltaHtmlFinal, hiddenFields);
     }
 
-    return results;
+    return { success: true, data: results };
   } catch (error: any) {
     console.error("Erro na extração:", error);
-    throw new Error(error.message || "Falha ao consultar o portal.");
+    return { success: false, error: error.message || "Falha de comunicação com o portal." };
   }
 }

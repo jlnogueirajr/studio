@@ -128,6 +128,12 @@ export default function Home() {
           const dateA = new Date(yA, mA - 1, dA);
           const dateB = new Date(yB, mB - 1, dB);
           
+          const isTodayA = dateA.getTime() === todayLimit.getTime();
+          const isTodayB = dateB.getTime() === todayLimit.getTime();
+
+          if (isTodayA) return -1;
+          if (isTodayB) return 1;
+
           const isFutureA = dateA > todayLimit;
           const isFutureB = dateB > todayLimit;
 
@@ -146,7 +152,7 @@ export default function Home() {
         id: m,
         matricula: m,
         dailyRecords: sortedRecords,
-        isAdmin: m === '000000' || base.isAdmin,
+        isAdmin: m === '000000',
         fixedDsrDays: base.fixedDsrDays || [0],
         dailyWorkload: base.dailyWorkload || 440,
         holidays: base.holidays || [],
@@ -285,7 +291,13 @@ export default function Home() {
                   if (!matricula || !firestore || !user || viewMonth === null || viewYear === null) return;
                   setIsLoading(true);
                   try {
-                    const freshData = await fetchMonthData(matricula, viewMonth, viewYear);
+                    const result = await fetchMonthData(matricula, viewMonth, viewYear);
+                    
+                    if (!result.success) {
+                      throw new Error(result.error);
+                    }
+
+                    const freshData = result.data;
                     const mYear = `${viewYear}-${viewMonth.toString().padStart(2, '0')}`;
                     const normalizedData = normalizeNightShifts(freshData.map(d => ({ ...d, times: [...d.times] })));
                     const batch = writeBatch(firestore);
@@ -305,7 +317,7 @@ export default function Home() {
                     await loadEmployeeData(matricula, viewMonth, viewYear);
                     toast({ title: "Portal sincronizado!" });
                   } catch (e: any) {
-                    toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
+                    toast({ variant: "destructive", title: "Erro na sincronização", description: e.message || "Portal lento ou fora do ar." });
                   } finally {
                     setIsLoading(false);
                   }
