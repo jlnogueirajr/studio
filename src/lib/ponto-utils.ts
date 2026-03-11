@@ -85,24 +85,38 @@ export function isDateDsr(
   return { isDsr, isHoliday };
 }
 
+/**
+ * Ordena as batidas de ponto garantindo que horários de madrugada (após 00:00) 
+ * apareçam no final da lista se o turno começou no dia anterior.
+ */
 export function sortPontoHours(hours: string[]): string[] {
   if (!hours || hours.length === 0) return [];
-  return [...hours].sort((a, b) => {
+  
+  // Remove duplicatas exatas
+  const uniqueHours = Array.from(new Set(hours));
+
+  return uniqueHours.sort((a, b) => {
     const minA = timeToMinutes(a);
     const minB = timeToMinutes(b);
-    // Batidas de madrugada (ex: 00:30) devem aparecer no final da lista se houver batidas de tarde/noite
-    const isAMad = minA < 360; // Antes das 06:00
+    
+    // Batidas de madrugada (00:00 às 05:59)
+    const isAMad = minA < 360; 
     const isBMad = minB < 360;
+    
+    // Se um é madrugada e outro não, o de madrugada deve vir DEPOIS (fim do turno anterior)
     if (isAMad && !isBMad) return 1;
     if (!isAMad && isBMad) return -1;
+    
     return minA - minB;
   });
 }
 
 /**
- * Normaliza registros para turnos noturnos.
+ * Normaliza registros para turnos noturnos, movendo batidas de saída 
+ * que ocorreram no dia civil seguinte para o registro do dia anterior.
  */
 export function normalizeNightShifts(records: any[]): any[] {
+  // Ordena por data crescente para processamento sequencial
   const sorted = [...records].sort((a, b) => {
     const [dA, mA, yA] = a.date.split('/').map(Number);
     const [dB, mB, yB] = b.date.split('/').map(Number);
@@ -113,14 +127,30 @@ export function normalizeNightShifts(records: any[]): any[] {
     const prev = sorted[i - 1];
     const curr = sorted[i];
 
-    if (prev.times && prev.times.length % 2 !== 0) {
-      const madTimes = curr.times.filter((t: string) => timeToMinutes(t) < 360);
-      if (madTimes.length > 0) {
-        const earliest = madTimes.sort((a: string, b: string) => timeToMinutes(a) - timeToMinutes(b))[0];
-        prev.times.push(earliest);
-        curr.times = curr.times.filter((t: string) => t !== earliest);
+    if (!prev.times || !curr.times) continue;
+
+    const madTimes = curr.times.filter((t: string) => timeToMinutes(t) < 360);
+    
+    if (madTimes.length > 0) {
+      const earliestMad = madTimes.sort((a: string, b: string) => timeToMinutes(a) - timeToMinutes(b))[0];
+      const lastPrevTime = prev.times.length > 0 ? timeToMinutes(prev.times[prev.times.length - 1]) : 0;
+      
+      // REGRA 1: Se o dia anterior está com batidas ímpares, ele OBRIGATORIAMENTE precisa de uma saída do dia seguinte
+      const isPrevOdd = prev.times.length % 2 !== 0;
+      
+      // REGRA 2: Mesmo se estiver par, se a batida de madrugada é a primeira do dia e o dia anterior terminou tarde (após 18h),
+      // é quase certo que ela pertence ao turno anterior (ex: saída às 00:15 após entrada às 20:52).
+      const belongsToPrev = lastPrevTime > 1080; // 18:00h
+
+      if (isPrevOdd || (belongsToPrev && curr.times.indexOf(earliestMad) === 0)) {
+        prev.times.push(earliestMad);
+        curr.times = curr.times.filter((t: string) => t !== earliestMad);
       }
     }
+    
+    // Re-ordena as batidas após a movimentação
+    prev.times = sortPontoHours(prev.times);
+    curr.times = sortPontoHours(curr.times);
   }
 
   return sorted;
