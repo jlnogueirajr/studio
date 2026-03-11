@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Loader2, User, RotateCcw, Search, Clock, AlertCircle, RefreshCw, Calendar as CalendarIcon, CheckCircle2, XCircle, Coffee } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { minutesToTime, timeToMinutes, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
