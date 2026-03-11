@@ -101,8 +101,6 @@ export default function Home() {
       const rawRecords = logsSnap.docs.map(d => ({ ...d.data(), id: d.id } as DailyRecord));
       
       const daysInMonth = new Date(year, month, 0).getDate();
-      const now = new Date();
-      now.setHours(0,0,0,0);
       
       const fullMonthRecords: DailyRecord[] = [];
       for (let d = 1; d <= daysInMonth; d++) {
@@ -120,10 +118,31 @@ export default function Home() {
       }
 
       const normalized = normalizeNightShifts(fullMonthRecords);
+      
+      const todayLimit = new Date();
+      todayLimit.setHours(0,0,0,0);
+
+      // Nova lógica de ordenação: Passado e Hoje (Decrescente) no topo, Futuro (Crescente) no final.
       const sortedRecords = normalized.sort((a, b) => {
           const [dA, mA, yA] = a.date.split('/').map(Number);
           const [dB, mB, yB] = b.date.split('/').map(Number);
-          return new Date(yB, mB-1, dB).getTime() - new Date(yA, mA-1, dA).getTime();
+          const dateA = new Date(yA, mA - 1, dA);
+          const dateB = new Date(yB, mB - 1, dB);
+          
+          const isFutureA = dateA > todayLimit;
+          const isFutureB = dateB > todayLimit;
+
+          // Se um é futuro e o outro não, o que não é futuro (passado/hoje) sobe
+          if (!isFutureA && isFutureB) return -1;
+          if (isFutureA && !isFutureB) return 1;
+
+          // Se ambos são passado/hoje: Decrescente (Hoje no topo, depois ontem...)
+          if (!isFutureA && !isFutureB) {
+            return dateB.getTime() - dateA.getTime();
+          }
+
+          // Se ambos são futuros: Crescente (Amanhã primeiro na seção de baixo)
+          return dateA.getTime() - dateB.getTime();
       });
 
       setEmployeeData({
