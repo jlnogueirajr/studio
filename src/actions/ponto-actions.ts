@@ -5,9 +5,6 @@
  * Implementa a lógica de navegação ASP.NET AJAX para percorrer todos os dias.
  */
 
-// Desabilita verificação SSL para o portal interno (hack necessário para ambientes de desenvolvimento)
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 /**
  * Extrai campos ocultos de um HTML completo ou de uma resposta Delta AJAX.
  * O formato Delta é |length|type|id|content|
@@ -85,6 +82,9 @@ function extractCalendarArguments(html: string, targetMonth: number): Record<num
 }
 
 export async function fetchMonthData(matricula: string, month: number, year: number) {
+  // Desabilita verificação SSL apenas para o portal interno durante a execução da consulta
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  
   const results: { date: string, times: string[] }[] = [];
   const TARGET_URL = "https://webapp.confianca.com.br/consultaponto/ponto.aspx";
 

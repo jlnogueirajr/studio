@@ -1,5 +1,7 @@
+
 'use client';
 
+import { useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -34,7 +36,11 @@ export function DailyRecordsTable({
   holidays,
   onEdit 
 }: DailyRecordsTableProps) {
-  const todayStr = new Date().toLocaleDateString('pt-BR');
+  const [todayStr, setTodayStr] = useState<string>('');
+
+  useEffect(() => {
+    setTodayStr(new Date().toLocaleDateString('pt-BR'));
+  }, []);
 
   return (
     <Card className="shadow-2xl border-border overflow-hidden bg-card">

@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DailyRecord } from '@/app/page';
 import { isDateDsr, calculateDailyWorkedMinutes, minutesToTime, sortPontoHours } from '@/lib/ponto-utils';
@@ -27,9 +28,17 @@ export function CalendarViewDialog({
   holidays,
   onClose 
 }: CalendarViewDialogProps) {
-  const [viewDate, setViewDate] = useState(new Date());
+  const [viewDate, setViewDate] = useState<Date | null>(null);
+
+  // Inicializa a data apenas no cliente
+  useEffect(() => {
+    if (isOpen && viewDate === null) {
+      setViewDate(new Date());
+    }
+  }, [isOpen]);
 
   const daysInMonth = useMemo(() => {
+    if (!viewDate) return [];
     const year = viewDate.getFullYear();
     const month = viewDate.getMonth();
     const firstDay = new Date(year, month, 1);
@@ -52,6 +61,8 @@ export function CalendarViewDialog({
     });
     return map;
   }, [records]);
+
+  if (!viewDate) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>

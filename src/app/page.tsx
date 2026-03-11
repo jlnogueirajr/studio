@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -52,8 +53,8 @@ export default function Home() {
   const [matricula, setMatricula] = useState<string | null>(null);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [viewMonth, setViewMonth] = useState(new Date().getMonth() + 1);
-  const [viewYear, setViewYear] = useState(new Date().getFullYear());
+  const [viewMonth, setViewMonth] = useState<number | null>(null);
+  const [viewYear, setViewYear] = useState<number | null>(null);
   
   const [showBalanceDialog, setShowBalanceDialog] = useState(false);
   const [showDsrDialog, setShowDsrDialog] = useState(false);
@@ -65,10 +66,17 @@ export default function Home() {
   const auth = useAuth();
   const { user, isUserLoading } = useUser();
 
+  // Inicializa mês e ano apenas no cliente para evitar erros de hidratação
+  useEffect(() => {
+    const now = new Date();
+    if (viewMonth === null) setViewMonth(now.getMonth() + 1);
+    if (viewYear === null) setViewYear(now.getFullYear());
+  }, []);
+
   // Carrega matrícula do cache e dados do usuário se autenticado
   useEffect(() => {
     const saved = localStorage.getItem('logged_matricula');
-    if (saved && user && firestore) {
+    if (saved && user && firestore && viewMonth !== null && viewYear !== null) {
       setMatricula(saved);
       loadEmployeeData(saved, viewMonth, viewYear);
     }
@@ -94,8 +102,9 @@ export default function Home() {
       
       // Gera visualização completa do mês (dias sem batida aparecem como vazios)
       const daysInMonth = new Date(year, month, 0).getDate();
-      const isCurrentMonth = month === (new Date().getMonth() + 1) && year === new Date().getFullYear();
-      const lastDayToRender = isCurrentMonth ? new Date().getDate() : daysInMonth;
+      const now = new Date();
+      const isCurrentMonth = month === (now.getMonth() + 1) && year === now.getFullYear();
+      const lastDayToRender = isCurrentMonth ? now.getDate() : daysInMonth;
 
       const fullMonthRecords: DailyRecord[] = [];
       for (let d = 1; d <= lastDayToRender; d++) {
@@ -142,7 +151,7 @@ export default function Home() {
   };
 
   const handleSyncPortal = async () => {
-    if (!matricula || !firestore || !user) return;
+    if (!matricula || !firestore || !user || viewMonth === null || viewYear === null) return;
     setIsLoading(true);
     try {
       const freshData = await fetchMonthData(matricula, viewMonth, viewYear);
@@ -181,6 +190,7 @@ export default function Home() {
   };
 
   const changeMonth = (dir: number) => {
+    if (viewMonth === null || viewYear === null) return;
     let newMonth = viewMonth + dir;
     let newYear = viewYear;
     if (newMonth > 12) { newMonth = 1; newYear++; }
@@ -189,7 +199,7 @@ export default function Home() {
     setViewYear(newYear);
   };
 
-  if (isUserLoading) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
+  if (isUserLoading || viewMonth === null || viewYear === null) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
 
   const isAdminUser = matricula === '000000' || employeeData?.isAdmin;
 
@@ -321,7 +331,7 @@ export default function Home() {
             if (matricula && firestore) {
               await setDoc(doc(firestore, 'userProfiles', matricula), { previousBalance: b, previousHolidayBalance: hb }, { merge: true });
               setShowBalanceDialog(false);
-              loadEmployeeData(matricula, viewMonth, viewYear);
+              loadEmployeeData(matricula, viewMonth!, viewYear!);
             }
           }} onClose={() => setShowBalanceDialog(false)} />
         
@@ -337,7 +347,7 @@ export default function Home() {
                 fixedDsrDays: days, referenceDsrSunday: refSun, dailyWorkload: workload, holidays: hdays 
               }, { merge: true });
               setShowDsrDialog(false);
-              loadEmployeeData(matricula, viewMonth, viewYear);
+              loadEmployeeData(matricula, viewMonth!, viewYear!);
             }
           }} onClose={() => setShowDsrDialog(false)} 
         />
@@ -361,7 +371,7 @@ export default function Home() {
                   times, date: editingRecord.date, ...opts
                 }, { merge: true });
                 setEditingRecord(null);
-                loadEmployeeData(matricula, viewMonth, viewYear);
+                loadEmployeeData(matricula, viewMonth!, viewYear!);
               }
             }} onClose={() => setEditingRecord(null)} 
           />

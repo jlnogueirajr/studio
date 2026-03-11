@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, TrendingUp, Landmark, Coffee, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { timeToMinutes, minutesToTime, calculateDailyWorkedMinutes, sortPontoHours, isDateDsr } from '@/lib/ponto-utils';
@@ -28,13 +29,19 @@ export function SummaryCards({
   holidays,
   onBalanceClick
 }: SummaryCardsProps) {
+  const [todayStr, setTodayStr] = useState<string>('');
+
+  useEffect(() => {
+    setTodayStr(new Date().toLocaleDateString('pt-BR'));
+  }, []);
+
   const stats = useMemo(() => {
     let totalWorkedMinutes = 0;
     let totalGoalMinutes = 0;
     let holidayCredits = 0;
     let holidayUsed = 0;
 
-    const todayStr = new Date().toLocaleDateString('pt-BR');
+    if (!todayStr) return null;
 
     records.forEach(record => {
       // Regra: Não calcula o saldo do dia atual para não afetar o banco de horas enquanto o usuário trabalha
@@ -81,7 +88,9 @@ export function SummaryCards({
       isMonthPositive: monthBalanceMinutes >= 0,
       holidayBalance: holidayCredits - holidayUsed + (previousHolidayBalance || 0),
     };
-  }, [records, previousBalance, previousHolidayBalance, fixedDsrDays, referenceDsrSunday, dailyWorkload, holidays]);
+  }, [records, previousBalance, previousHolidayBalance, fixedDsrDays, referenceDsrSunday, dailyWorkload, holidays, todayStr]);
+
+  if (!stats) return null;
 
   return (
     <div className="grid gap-4 md:grid-cols-4">
