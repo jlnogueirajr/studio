@@ -118,17 +118,22 @@ export function CalendarViewDialog({
               );
             }
 
-            let goalForDay = 0;
-            if (!isMetaZeroDay) {
-              goalForDay = dailyWorkload;
-            } else if ((calendarHoliday || record?.isHoliday) && workedMinutes > 0) {
-              goalForDay = dailyWorkload;
-            } else {
-              goalForDay = 0;
-            }
+            let goalForDay = isMetaZeroDay ? 0 : dailyWorkload;
             
-            const balance = workedMinutes - goalForDay;
-            const isToday = new Date().toDateString() === date.toDateString();
+            // Lógica de saldo consistente com a tabela principal
+            const todayLimit = new Date();
+            todayLimit.setHours(0,0,0,0);
+            const isFuture = date > todayLimit;
+            const isToday = date.toDateString() === new Date().toDateString();
+
+            let dailyBalance = 0;
+            if (isFuture) {
+              dailyBalance = 0;
+            } else if (isToday && workedMinutes < goalForDay) {
+              dailyBalance = 0;
+            } else {
+              dailyBalance = workedMinutes - goalForDay;
+            }
 
             return (
               <div 
@@ -151,24 +156,31 @@ export function CalendarViewDialog({
                 </div>
                 
                 <div className="mt-2 space-y-1">
-                  {record ? (
+                  {record && workedMinutes > 0 ? (
                     <>
                       <div className="text-[10px] font-black text-foreground tabular-nums text-center">
-                        {workedMinutes > 0 ? minutesToTime(workedMinutes) : "---"}
+                        {minutesToTime(workedMinutes)}
                       </div>
                       <div className={cn(
                         "text-[10px] font-black p-0.5 rounded text-center tabular-nums shadow-sm border",
-                        balance >= 0 
-                          ? "bg-green-500/10 text-green-600 border-green-500/20" 
-                          : "bg-red-500/10 text-red-600 border-red-500/20"
+                        isFuture || (isToday && dailyBalance === 0)
+                          ? "bg-muted text-muted-foreground border-border"
+                          : dailyBalance >= 0 
+                            ? "bg-green-500/10 text-green-600 border-green-500/20" 
+                            : "bg-red-500/10 text-red-600 border-red-500/20"
                       )}>
-                        {minutesToTime(balance, true)}
+                        {isFuture || (isToday && dailyBalance === 0) ? "--:--" : minutesToTime(dailyBalance, true)}
                       </div>
                     </>
                   ) : (
-                    !isMetaZeroDay && date < new Date() && (
-                      <div className="text-[9px] font-black bg-destructive/10 text-destructive p-0.5 rounded text-center border border-destructive/20">
-                        -{minutesToTime(dailyWorkload)}
+                    !isFuture && !isMetaZeroDay && (
+                      <div className={cn(
+                        "text-[9px] font-black p-0.5 rounded text-center border",
+                        isToday 
+                          ? "bg-muted text-muted-foreground border-border"
+                          : "bg-destructive/10 text-destructive border-destructive/20"
+                      )}>
+                        {isToday ? "--:--" : `-${minutesToTime(dailyWorkload)}`}
                       </div>
                     )
                   )}
@@ -177,9 +189,9 @@ export function CalendarViewDialog({
                       {calendarHoliday ? "Feriado" : "Folga"}
                     </div>
                   )}
-                  {isMetaZeroDay && workedMinutes > 0 && (calendarHoliday || record?.isHoliday) && (
-                    <div className="text-[8px] font-black text-amber-500 text-center mt-1 uppercase">
-                      TRABALHADO
+                  {isFuture && !workedMinutes && (
+                    <div className="text-[8px] font-black text-muted-foreground/50 text-center mt-1 uppercase">
+                      ---
                     </div>
                   )}
                 </div>
