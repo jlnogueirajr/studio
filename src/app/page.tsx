@@ -122,7 +122,6 @@ export default function Home() {
       const todayLimit = new Date();
       todayLimit.setHours(0,0,0,0);
 
-      // Nova lógica de ordenação: Passado e Hoje (Decrescente) no topo, Futuro (Crescente) no final.
       const sortedRecords = normalized.sort((a, b) => {
           const [dA, mA, yA] = a.date.split('/').map(Number);
           const [dB, mB, yB] = b.date.split('/').map(Number);
@@ -132,16 +131,13 @@ export default function Home() {
           const isFutureA = dateA > todayLimit;
           const isFutureB = dateB > todayLimit;
 
-          // Se um é futuro e o outro não, o que não é futuro (passado/hoje) sobe
           if (!isFutureA && isFutureB) return -1;
           if (isFutureA && !isFutureB) return 1;
 
-          // Se ambos são passado/hoje: Decrescente (Hoje no topo, depois ontem...)
           if (!isFutureA && !isFutureB) {
             return dateB.getTime() - dateA.getTime();
           }
 
-          // Se ambos são futuros: Crescente (Amanhã primeiro na seção de baixo)
           return dateA.getTime() - dateB.getTime();
       });
 
@@ -150,6 +146,7 @@ export default function Home() {
         id: m,
         matricula: m,
         dailyRecords: sortedRecords,
+        isAdmin: m === '000000' || base.isAdmin,
         fixedDsrDays: base.fixedDsrDays || [0],
         dailyWorkload: base.dailyWorkload || 440,
         holidays: base.holidays || [],
@@ -159,7 +156,6 @@ export default function Home() {
         previousBalanceMonth: base.previousBalanceMonth,
         previousBalanceYear: base.previousBalanceYear,
         balanceAdjustment: base.balanceAdjustment || '00:00',
-        isAdmin: m === '000000' || base.isAdmin,
         uid: base.uid,
         authVersion: base.authVersion || 0
       } as EmployeeData);
@@ -170,42 +166,17 @@ export default function Home() {
     }
   };
 
-  const handleSyncPortal = async () => {
-    if (!matricula || !firestore || !user || viewMonth === null || viewYear === null) return;
-    setIsLoading(true);
+  const handleLogout = async () => {
     try {
-      const freshData = await fetchMonthData(matricula, viewMonth, viewYear);
-      const mYear = `${viewYear}-${viewMonth.toString().padStart(2, '0')}`;
-      
-      const normalizedData = normalizeNightShifts(freshData.map(d => ({ ...d, times: [...d.times] })));
-      const batch = writeBatch(firestore);
-      
-      const summaryRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', mYear);
-      batch.set(summaryRef, { 
-        id: mYear, 
-        userProfileId: matricula, 
-        year: viewYear, 
-        month: viewMonth,
-        scrapedAt: new Date().toISOString(),
-      }, { merge: true });
-
-      normalizedData.forEach(record => {
-        const dayId = record.date.replace(/\//g, '-');
-        const dayRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', mYear, 'dailyEntries', dayId);
-        batch.set(dayRef, { 
-          ...record, 
-          id: dayId, 
-          monthlyPointSummaryId: mYear,
-        }, { merge: true });
-      });
-
-      await batch.commit();
-      await loadEmployeeData(matricula, viewMonth, viewYear);
-      toast({ title: "Portal sincronizado!" });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
-    } finally {
-      setIsLoading(false);
+      if (auth) await signOut(auth);
+      localStorage.removeItem('logged_matricula');
+      setMatricula(null);
+      setEmployeeData(null);
+      setShowAdminPanel(false);
+      setViewMonth(new Date().getMonth() + 1);
+      setViewYear(new Date().getFullYear());
+    } catch (error) {
+      console.error("Erro ao sair:", error);
     }
   };
 
@@ -221,7 +192,7 @@ export default function Home() {
 
   if (isUserLoading || viewMonth === null || viewYear === null) return <div className="min-h-screen flex items-center justify-center bg-background"><Loader2 className="animate-spin text-primary w-12 h-12" /></div>;
 
-  const isAdminUser = matricula === '000000' || employeeData?.isAdmin;
+  const isAdminUser = matricula === '000000';
 
   return (
     <main className="min-h-screen bg-background p-4 md:p-8 transition-colors duration-300">
@@ -248,12 +219,7 @@ export default function Home() {
                   <Button variant="outline" size="sm" onClick={() => setShowDsrDialog(true)} className="bg-card border-primary/30 font-black"><Settings className="w-4 h-4 mr-2" /> ESCALA</Button>
                 </>
               )}
-              <Button variant="ghost" size="sm" onClick={async () => {
-                await signOut(auth!);
-                localStorage.removeItem('logged_matricula');
-                setMatricula(null);
-                setEmployeeData(null);
-              }} className="font-bold text-destructive hover:bg-destructive/10"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="font-bold text-destructive hover:bg-destructive/10"><LogOut className="w-4 h-4 mr-2" /> Sair</Button>
             </div>
           )}
         </header>
@@ -295,7 +261,7 @@ export default function Home() {
               }
             }} isLoading={isLoading} />
           </div>
-        ) : showAdminPanel ? (
+        ) : showAdminPanel && isAdminUser ? (
           <AdminPanel />
         ) : (
           <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -315,7 +281,35 @@ export default function Home() {
                   <p className="text-[10px] font-black text-muted-foreground uppercase">Colaborador</p>
                   <h2 className="text-xl font-black text-foreground">#{matricula}</h2>
                 </div>
-                <Button onClick={handleSyncPortal} disabled={isLoading} variant="default" className="shadow-xl font-black bg-primary transform transition hover:scale-105">
+                <Button onClick={async () => {
+                  if (!matricula || !firestore || !user || viewMonth === null || viewYear === null) return;
+                  setIsLoading(true);
+                  try {
+                    const freshData = await fetchMonthData(matricula, viewMonth, viewYear);
+                    const mYear = `${viewYear}-${viewMonth.toString().padStart(2, '0')}`;
+                    const normalizedData = normalizeNightShifts(freshData.map(d => ({ ...d, times: [...d.times] })));
+                    const batch = writeBatch(firestore);
+                    
+                    const summaryRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', mYear);
+                    batch.set(summaryRef, { 
+                      id: mYear, userProfileId: matricula, year: viewYear, month: viewMonth, scrapedAt: new Date().toISOString(),
+                    }, { merge: true });
+
+                    normalizedData.forEach(record => {
+                      const dayId = record.date.replace(/\//g, '-');
+                      const dayRef = doc(firestore, 'userProfiles', matricula, 'monthlySummaries', mYear, 'dailyEntries', dayId);
+                      batch.set(dayRef, { ...record, id: dayId, monthlyPointSummaryId: mYear }, { merge: true });
+                    });
+
+                    await batch.commit();
+                    await loadEmployeeData(matricula, viewMonth, viewYear);
+                    toast({ title: "Portal sincronizado!" });
+                  } catch (e: any) {
+                    toast({ variant: "destructive", title: "Erro na sincronização", description: e.message });
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }} disabled={isLoading} variant="default" className="shadow-xl font-black bg-primary transform transition hover:scale-105">
                   {isLoading ? <Loader2 className="animate-spin w-5 h-5" /> : <RefreshCcw className="w-5 h-5 mr-3" />}
                   ATUALIZAR DADOS
                 </Button>
@@ -358,11 +352,8 @@ export default function Home() {
           onSave={async (b, month, year, adj, hb) => {
             if (matricula && firestore) {
               await setDoc(doc(firestore, 'userProfiles', matricula), { 
-                previousBalance: b, 
-                previousBalanceMonth: month, 
-                previousBalanceYear: year,
-                balanceAdjustment: adj,
-                previousHolidayBalance: hb 
+                previousBalance: b, previousBalanceMonth: month, previousBalanceYear: year,
+                balanceAdjustment: adj, previousHolidayBalance: hb 
               }, { merge: true });
               setShowBalanceDialog(false);
               loadEmployeeData(matricula, viewMonth!, viewYear!);
